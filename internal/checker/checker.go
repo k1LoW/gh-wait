@@ -8,4 +8,5 @@ import (
 
 type Checker interface {
 	Check(ctx context.Context, r *rule.WatchRule) (bool, error)
+	CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error)
 }

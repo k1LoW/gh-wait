@@ -36,8 +36,11 @@ var prCmd = &cobra.Command{
 				conditions = append(conditions, flag)
 			}
 		}
-		if len(conditions) == 0 {
-			return fmt.Errorf("at least one condition flag is required (--approved, --merged, --closed, --commented, --ci-finished, --ci-failed)")
+		until, _ := cmd.Flags().GetStringSlice("until")
+		count, _ := cmd.Flags().GetInt("count")
+
+		if len(conditions) == 0 && len(until) == 0 {
+			return fmt.Errorf("at least one condition flag or --until is required (--approved, --merged, --closed, --commented, --ci-finished, --ci-failed, --until)")
 		}
 
 		actionFlag := "notify"
@@ -48,7 +51,7 @@ var prCmd = &cobra.Command{
 		owner, repoName := rule.SplitRepo(repo)
 		url := fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repoName, number)
 
-		id := rule.GenerateID("pr", repo, number, conditions)
+		id := rule.GenerateID("pr", repo, number, conditions, until, count)
 		wr := &rule.WatchRule{
 			ID:         id,
 			Type:       "pr",
@@ -59,6 +62,8 @@ var prCmd = &cobra.Command{
 			URL:        url,
 			CreatedAt:  time.Now(),
 			Status:     "watching",
+			Until:      until,
+			MaxCount:   count,
 		}
 
 		if err := ensureServer(); err != nil {
@@ -85,4 +90,6 @@ func init() {
 	prCmd.Flags().Bool("ci-finished", false, "Watch for CI completion")
 	prCmd.Flags().Bool("ci-failed", false, "Watch for CI failure")
 	prCmd.Flags().Bool("open", false, "Open in browser when condition is met")
+	prCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed, merged). Can be specified multiple times")
+	prCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
 }

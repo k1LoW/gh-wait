@@ -16,8 +16,12 @@ func NewIssueChecker(client *github.Client) *IssueChecker {
 }
 
 func (c *IssueChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+	return c.CheckConditions(ctx, r, r.Conditions)
+}
+
+func (c *IssueChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
 	owner, repo := rule.SplitRepo(r.Repo)
-	for _, cond := range r.Conditions {
+	for _, cond := range conditions {
 		matched, err := c.checkCondition(ctx, owner, repo, r, cond)
 		if err != nil {
 			return false, err
@@ -32,7 +36,7 @@ func (c *IssueChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, erro
 func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (bool, error) {
 	switch cond {
 	case "commented":
-		since := r.CreatedAt
+		since := r.SinceTime()
 		comments, _, err := c.client.Issues.ListComments(ctx, owner, repo, r.Number,
 			&github.IssueListCommentsOptions{Since: &since})
 		if err != nil {

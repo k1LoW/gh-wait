@@ -18,8 +18,12 @@ func NewPRChecker(client *github.Client) *PRChecker {
 }
 
 func (c *PRChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+	return c.CheckConditions(ctx, r, r.Conditions)
+}
+
+func (c *PRChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
 	owner, repo := rule.SplitRepo(r.Repo)
-	for _, cond := range r.Conditions {
+	for _, cond := range conditions {
 		matched, err := c.checkCondition(ctx, owner, repo, r, cond)
 		if err != nil {
 			return false, err
@@ -141,7 +145,7 @@ func (c *PRChecker) checkCIFailed(ctx context.Context, owner, repo string, numbe
 }
 
 func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *rule.WatchRule) (bool, error) {
-	since := r.CreatedAt
+	since := r.SinceTime()
 	issueComments, _, err := c.client.Issues.ListComments(ctx, owner, repo, r.Number,
 		&github.IssueListCommentsOptions{Since: &since})
 	if err != nil {

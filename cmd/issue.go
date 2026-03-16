@@ -36,8 +36,11 @@ var issueCmd = &cobra.Command{
 				conditions = append(conditions, flag)
 			}
 		}
-		if len(conditions) == 0 {
-			return fmt.Errorf("at least one condition flag is required (--commented, --closed)")
+		until, _ := cmd.Flags().GetStringSlice("until")
+		count, _ := cmd.Flags().GetInt("count")
+
+		if len(conditions) == 0 && len(until) == 0 {
+			return fmt.Errorf("at least one condition flag or --until is required (--commented, --closed, --until)")
 		}
 
 		actionFlag := "notify"
@@ -48,7 +51,7 @@ var issueCmd = &cobra.Command{
 		owner, repoName := rule.SplitRepo(repo)
 		url := fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repoName, number)
 
-		id := rule.GenerateID("issue", repo, number, conditions)
+		id := rule.GenerateID("issue", repo, number, conditions, until, count)
 		wr := &rule.WatchRule{
 			ID:         id,
 			Type:       "issue",
@@ -59,6 +62,8 @@ var issueCmd = &cobra.Command{
 			URL:        url,
 			CreatedAt:  time.Now(),
 			Status:     "watching",
+			Until:      until,
+			MaxCount:   count,
 		}
 
 		if err := ensureServer(); err != nil {
@@ -81,4 +86,6 @@ func init() {
 	issueCmd.Flags().Bool("commented", false, "Watch for new comments")
 	issueCmd.Flags().Bool("closed", false, "Watch for close")
 	issueCmd.Flags().Bool("open", false, "Open in browser when condition is met")
+	issueCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed). Can be specified multiple times")
+	issueCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
 }

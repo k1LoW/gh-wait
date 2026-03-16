@@ -85,6 +85,19 @@ func TestStateMarkTriggered(t *testing.T) {
 	}
 }
 
+func TestStateUpdateRule(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{ID: "abc", Type: "pr", Status: "watching", TriggerCount: 0})
+
+	updated := &rule.WatchRule{ID: "abc", Type: "pr", Status: "watching", TriggerCount: 2}
+	s.UpdateRule(updated)
+
+	rules := s.Rules()
+	if rules[0].TriggerCount != 2 {
+		t.Errorf("expected TriggerCount 2, got %d", rules[0].TriggerCount)
+	}
+}
+
 func TestStateSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
@@ -108,6 +121,42 @@ func TestStateSaveAndLoad(t *testing.T) {
 	}
 	if rules[0].ID != "abc" {
 		t.Errorf("expected ID abc, got %s", rules[0].ID)
+	}
+}
+
+func TestStateSaveAndLoadWithContinuousWatch(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+
+	s := NewState(19999)
+	s.AddRule(&rule.WatchRule{
+		ID: "cont1", Type: "pr", Repo: "owner/repo", Number: 1, Status: "watching",
+		Until: []string{"closed"}, MaxCount: 3, TriggerCount: 1,
+		LastCheckedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+	})
+
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	s2 := NewState(19999)
+	if err := s2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	rules := s2.Rules()
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+	r := rules[0]
+	if len(r.Until) != 1 || r.Until[0] != "closed" {
+		t.Errorf("expected Until [closed], got %v", r.Until)
+	}
+	if r.MaxCount != 3 {
+		t.Errorf("expected MaxCount 3, got %d", r.MaxCount)
+	}
+	if r.TriggerCount != 1 {
+		t.Errorf("expected TriggerCount 1, got %d", r.TriggerCount)
 	}
 }
 
@@ -232,12 +281,25 @@ func TestHandleShutdown(t *testing.T) {
 // CheckRules test with mock checker
 
 type mockChecker struct {
-	result bool
-	err    error
+	result          bool
+	err             error
+	conditionResult map[string]bool // per-condition results for CheckConditions
 }
 
-func (m *mockChecker) Check(_ context.Context, _ *rule.WatchRule) (bool, error) {
-	return m.result, m.err
+func (m *mockChecker) Check(_ context.Context, r *rule.WatchRule) (bool, error) {
+	return m.CheckConditions(nil, r, r.Conditions)
+}
+
+func (m *mockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, conditions []string) (bool, error) {
+	if m.conditionResult == nil {
+		return m.result, m.err
+	}
+	for _, c := range conditions {
+		if m.conditionResult[c] {
+			return true, m.err
+		}
+	}
+	return false, m.err
 }
 
 type mockAction struct {
@@ -251,7 +313,7 @@ func (m *mockAction) Execute(r *rule.WatchRule) error {
 
 func TestCheckRulesMatched(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching"})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}})
 
 	mc := &mockChecker{result: true}
 	ma := &mockAction{}
@@ -269,7 +331,7 @@ func TestCheckRulesMatched(t *testing.T) {
 
 func TestCheckRulesNotMatched(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching"})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}})
 
 	mc := &mockChecker{result: false}
 	ma := &mockAction{}
@@ -287,7 +349,7 @@ func TestCheckRulesNotMatched(t *testing.T) {
 
 func TestCheckRulesNotifyAction(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "notify", Status: "watching"})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "notify", Status: "watching", Conditions: []string{"approved"}})
 
 	mc := &mockChecker{result: true}
 	ma := &mockAction{}
@@ -307,8 +369,8 @@ func TestCheckRulesNotifyAction(t *testing.T) {
 
 func TestCheckRulesMultipleTypes(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "pr1", Type: "pr", Action: "open", Status: "watching"})
-	s.AddRule(&rule.WatchRule{ID: "issue1", Type: "issue", Action: "open", Status: "watching"})
+	s.AddRule(&rule.WatchRule{ID: "pr1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}})
+	s.AddRule(&rule.WatchRule{ID: "issue1", Type: "issue", Action: "open", Status: "watching", Conditions: []string{"closed"}})
 
 	prMock := &mockChecker{result: true}
 	issueMock := &mockChecker{result: false}
@@ -323,6 +385,145 @@ func TestCheckRulesMultipleTypes(t *testing.T) {
 	rules := s.Rules()
 	if len(rules) != 1 || rules[0].ID != "issue1" {
 		t.Error("expected only issue1 to remain")
+	}
+}
+
+// Continuous watch tests
+
+func TestCheckRulesContinuousWithUntil(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions: []string{"commented"},
+		Until:      []string{"closed"},
+	})
+
+	// commented matches, closed does not
+	mc := &mockChecker{conditionResult: map[string]bool{"commented": true, "closed": false}}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, ma)
+
+	if len(ma.executed) != 1 {
+		t.Fatalf("expected action executed, got %v", ma.executed)
+	}
+	// Rule should remain (continuous watch)
+	rules := s.Rules()
+	if len(rules) != 1 {
+		t.Fatal("expected rule to remain for continuous watch")
+	}
+	if rules[0].TriggerCount != 1 {
+		t.Errorf("expected TriggerCount 1, got %d", rules[0].TriggerCount)
+	}
+	if rules[0].LastCheckedAt.IsZero() {
+		t.Error("expected LastCheckedAt to be set")
+	}
+}
+
+func TestCheckRulesUntilMatched(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions: []string{"commented"},
+		Until:      []string{"closed"},
+	})
+
+	// closed matches → rule should be removed without executing action
+	mc := &mockChecker{conditionResult: map[string]bool{"commented": true, "closed": true}}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, ma)
+
+	// No action for conditions (until takes precedence)
+	if len(ma.executed) != 0 {
+		t.Errorf("expected no action when until matched, got %v", ma.executed)
+	}
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed when until matched")
+	}
+}
+
+func TestCheckRulesUntilOnlyMode(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions: nil,
+		Until:      []string{"closed"},
+	})
+
+	// closed matches → should execute action and remove rule
+	mc := &mockChecker{conditionResult: map[string]bool{"closed": true}}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, ma)
+
+	if len(ma.executed) != 1 {
+		t.Errorf("expected action executed in until-only mode, got %v", ma.executed)
+	}
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed")
+	}
+}
+
+func TestCheckRulesMaxCount(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions:   []string{"commented"},
+		MaxCount:     2,
+		TriggerCount: 0,
+	})
+
+	mc := &mockChecker{conditionResult: map[string]bool{"commented": true}}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	// First trigger
+	CheckRules(context.Background(), s, checkers, ma)
+	rules := s.Rules()
+	if len(rules) != 1 {
+		t.Fatal("expected rule to remain after first trigger")
+	}
+	if rules[0].TriggerCount != 1 {
+		t.Errorf("expected TriggerCount 1, got %d", rules[0].TriggerCount)
+	}
+
+	// Second trigger → should be removed
+	ma.executed = nil
+	CheckRules(context.Background(), s, checkers, ma)
+	if len(ma.executed) != 1 {
+		t.Errorf("expected action on second trigger, got %v", ma.executed)
+	}
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed after reaching MaxCount")
+	}
+}
+
+func TestCheckRulesMaxCountWithUntil(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions:   []string{"commented"},
+		Until:        []string{"merged"},
+		MaxCount:     3,
+		TriggerCount: 2,
+	})
+
+	// commented matches, merged does not → third trigger reaches MaxCount
+	mc := &mockChecker{conditionResult: map[string]bool{"commented": true, "merged": false}}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, ma)
+
+	if len(ma.executed) != 1 {
+		t.Errorf("expected action executed, got %v", ma.executed)
+	}
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed after reaching MaxCount")
 	}
 }
 

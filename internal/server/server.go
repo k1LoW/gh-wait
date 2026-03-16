@@ -77,6 +77,18 @@ func (s *State) RemoveRule(id string) bool {
 	return false
 }
 
+func (s *State) UpdateRule(r *rule.WatchRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, existing := range s.rules {
+		if existing.ID == r.ID {
+			s.rules[i] = r
+			s.notifyBackup()
+			return
+		}
+	}
+}
+
 func (s *State) WatchingRules() []*rule.WatchRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -399,9 +411,34 @@ func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Che
 
 func CheckRules(ctx context.Context, state *State, checkers map[string]checker.Checker, act action.Action) {
 	rules := state.WatchingRules()
+	now := time.Now()
 	for _, r := range rules {
 		c, ok := checkers[r.Type]
 		if !ok {
+			continue
+		}
+
+		// Step 1: Check until (termination) conditions
+		if len(r.Until) > 0 {
+			untilMatched, err := c.CheckConditions(ctx, r, r.Until)
+			if err != nil {
+				slog.Error("until check failed", "rule_id", r.ID, "error", err)
+				continue
+			}
+			if untilMatched {
+				slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+				if len(r.Conditions) == 0 {
+					// Until-only mode: execute action when until condition is met
+					executeAction(act, r)
+				}
+				state.MarkTriggered(r.ID)
+				state.RemoveRule(r.ID)
+				continue
+			}
+		}
+
+		// Step 2: Check trigger conditions
+		if len(r.Conditions) == 0 {
 			continue
 		}
 
@@ -412,13 +449,25 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		}
 		if matched {
 			slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-			if r.Action == "open" {
-				if err := act.Execute(r); err != nil {
-					slog.Error("action failed", "rule_id", r.ID, "error", err)
-				}
+			executeAction(act, r)
+
+			r.TriggerCount++
+			r.LastCheckedAt = now
+			state.UpdateRule(r)
+
+			// Step 3: Determine if rule should be removed
+			if r.IsOneShot() || (r.MaxCount > 0 && r.TriggerCount >= r.MaxCount) {
+				state.MarkTriggered(r.ID)
+				state.RemoveRule(r.ID)
 			}
-			state.MarkTriggered(r.ID)
-			state.RemoveRule(r.ID)
+		}
+	}
+}
+
+func executeAction(act action.Action, r *rule.WatchRule) {
+	if r.Action == "open" {
+		if err := act.Execute(r); err != nil {
+			slog.Error("action failed", "rule_id", r.ID, "error", err)
 		}
 	}
 }
