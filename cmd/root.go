@@ -1,51 +1,43 @@
-/*
-Copyright © 2026 Ken'ichiro Oyama <k1lowxb@gmail.com>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"net"
 	"os"
+	"os/exec"
+	"strconv"
+	"time"
 
+	"github.com/k1LoW/gh-wait/internal/client"
+	"github.com/k1LoW/gh-wait/internal/server"
 	"github.com/spf13/cobra"
 )
 
+const (
+	defaultPort        = 9248
+	probeTimeout       = 2 * time.Second
+	waitForReadyTimeout = 10 * time.Second
+)
 
+var (
+	port       int
+	foreground bool
+)
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "gh-wait",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Short: "Wait for GitHub events and get notified",
+	Long:  `gh-wait watches for GitHub events (PR approvals, merges, comments, etc.) and notifies you when conditions are met.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if foreground {
+			return runForeground(cmd.Context())
+		}
+		return cmd.Help()
+	},
+	SilenceUsage: true,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -54,15 +46,67 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gh-wait.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.PersistentFlags().IntVar(&port, "port", defaultPort, "Server port")
+	rootCmd.PersistentFlags().BoolVar(&foreground, "foreground", false, "Run server in foreground")
 }
 
+func serverAddr() string {
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+}
 
+func probeServer() (*client.StatusResponse, error) {
+	c := client.New(serverAddr())
+	return c.ProbeStatus()
+}
+
+func ensureServer() error {
+	if _, err := probeServer(); err == nil {
+		return nil
+	}
+	return startBackground()
+}
+
+func startBackground() error {
+	binPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot find binary: %w", err)
+	}
+
+	cmd := exec.Command(binPath, "--foreground", "--port", strconv.Itoa(port))
+	setSysProcAttr(cmd)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start server process: %w", err)
+	}
+
+	pid := cmd.Process.Pid
+	if err := cmd.Process.Release(); err != nil {
+		return fmt.Errorf("failed to release process: %w", err)
+	}
+
+	if err := waitForReady(); err != nil {
+		return fmt.Errorf("server failed to start (pid=%d): %w", pid, err)
+	}
+
+	fmt.Fprintf(os.Stderr, "gh-wait server started (pid=%d, port=%d)\n", pid, port)
+	return nil
+}
+
+func waitForReady() error {
+	deadline := time.Now().Add(waitForReadyTimeout)
+	for time.Now().Before(deadline) {
+		if _, err := probeServer(); err == nil {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout waiting for server to be ready")
+}
+
+func runForeground(ctx context.Context) error {
+	addr := serverAddr()
+	return server.Run(ctx, addr, port)
+}
+
+func newClient() *client.Client {
+	return client.New(serverAddr())
+}

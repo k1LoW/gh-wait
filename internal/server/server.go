@@ -1,0 +1,424 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/k1LoW/donegroup"
+	factory "github.com/k1LoW/go-github-client/v83/factory"
+	"github.com/k1LoW/gh-wait/internal/action"
+	"github.com/k1LoW/gh-wait/internal/checker"
+	"github.com/k1LoW/gh-wait/internal/rule"
+	"github.com/k1LoW/gh-wait/version"
+)
+
+const (
+	pollInterval  = 30 * time.Second
+	backupDelay   = 1 * time.Second
+)
+
+type State struct {
+	mu         sync.RWMutex
+	rules      []*rule.WatchRule
+	shutdownCh chan struct{}
+	backupCh   chan struct{}
+	port       int
+}
+
+func NewState(port int) *State {
+	return &State{
+		rules:      make([]*rule.WatchRule, 0),
+		shutdownCh: make(chan struct{}, 1),
+		backupCh:   make(chan struct{}, 1),
+		port:       port,
+	}
+}
+
+func (s *State) AddRule(r *rule.WatchRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Deduplicate by ID
+	for i, existing := range s.rules {
+		if existing.ID == r.ID {
+			s.rules[i] = r
+			s.notifyBackup()
+			return
+		}
+	}
+	s.rules = append(s.rules, r)
+	s.notifyBackup()
+}
+
+func (s *State) Rules() []*rule.WatchRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]*rule.WatchRule, len(s.rules))
+	copy(result, s.rules)
+	return result
+}
+
+func (s *State) RemoveRule(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, r := range s.rules {
+		if r.ID == id {
+			s.rules = append(s.rules[:i], s.rules[i+1:]...)
+			s.notifyBackup()
+			return true
+		}
+	}
+	return false
+}
+
+func (s *State) WatchingRules() []*rule.WatchRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []*rule.WatchRule
+	for _, r := range s.rules {
+		if r.Status == "watching" {
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
+func (s *State) MarkTriggered(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.rules {
+		if r.ID == id {
+			r.Status = "triggered"
+			s.notifyBackup()
+			return
+		}
+	}
+}
+
+func (s *State) notifyBackup() {
+	select {
+	case s.backupCh <- struct{}{}:
+	default:
+	}
+}
+
+// Persistence
+
+func stateDir() (string, error) {
+	if v := os.Getenv("XDG_STATE_HOME"); v != "" {
+		return filepath.Join(v, "gh-wait"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state", "gh-wait"), nil
+}
+
+func statePath(port int) (string, error) {
+	dir, err := stateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, fmt.Sprintf("gh-wait-%d.json", port)), nil
+}
+
+func (s *State) Save() error {
+	p, err := statePath(s.port)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("failed to create state directory: %w", err)
+	}
+
+	rules := s.Rules()
+	// Only save watching rules
+	var watching []*rule.WatchRule
+	for _, r := range rules {
+		if r.Status == "watching" {
+			watching = append(watching, r)
+		}
+	}
+
+	b, err := json.Marshal(watching)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(dir, "gh-wait-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("failed to write state: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, p); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("failed to rename temp file: %w", err)
+	}
+	return nil
+}
+
+func (s *State) Load() error {
+	p, err := statePath(s.port)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read state file: %w", err)
+	}
+	var rules []*rule.WatchRule
+	if err := json.Unmarshal(data, &rules); err != nil {
+		return fmt.Errorf("failed to unmarshal state: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rules = rules
+	return nil
+}
+
+func (s *State) backupLoop(ctx context.Context) {
+	var timer *time.Timer
+	for {
+		select {
+		case <-s.backupCh:
+			if timer != nil {
+				timer.Stop()
+			}
+			timer = time.NewTimer(backupDelay)
+		case <-func() <-chan time.Time {
+			if timer != nil {
+				return timer.C
+			}
+			return make(chan time.Time)
+		}():
+			if err := s.Save(); err != nil {
+				slog.Error("failed to save state", "error", err)
+			}
+			timer = nil
+		case <-ctx.Done():
+			if timer != nil {
+				timer.Stop()
+			}
+			if err := s.Save(); err != nil {
+				slog.Error("failed to save state on shutdown", "error", err)
+			}
+			return
+		}
+	}
+}
+
+// HTTP Handlers
+
+func NewHandler(state *State) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /_/api/status", handleStatus(state))
+	mux.HandleFunc("POST /_/api/rules", handleAddRule(state))
+	mux.HandleFunc("GET /_/api/rules", handleListRules(state))
+	mux.HandleFunc("DELETE /_/api/rules/{id}", handleDeleteRule(state))
+	mux.HandleFunc("POST /_/api/shutdown", handleShutdown(state))
+	return mux
+}
+
+func handleStatus(state *State) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rules := state.Rules()
+		watchingCount := 0
+		for _, r := range rules {
+			if r.Status == "watching" {
+				watchingCount++
+			}
+		}
+		resp := struct {
+			Version      string `json:"version"`
+			PID          int    `json:"pid"`
+			RuleCount    int    `json:"rule_count"`
+			WatchingCount int   `json:"watching_count"`
+		}{
+			Version:      version.Version,
+			PID:          os.Getpid(),
+			RuleCount:    len(rules),
+			WatchingCount: watchingCount,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func handleAddRule(state *State) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var wr rule.WatchRule
+		if err := json.NewDecoder(r.Body).Decode(&wr); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		state.AddRule(&wr)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(&wr)
+	}
+}
+
+func handleListRules(state *State) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rules := state.Rules()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(rules)
+	}
+}
+
+func handleDeleteRule(state *State) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if state.RemoveRule(id) {
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			http.Error(w, "rule not found", http.StatusNotFound)
+		}
+	}
+}
+
+func handleShutdown(state *State) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		select {
+		case state.shutdownCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// Server lifecycle
+
+func Run(ctx context.Context, addr string, port int) error {
+	state := NewState(port)
+
+	if err := state.Load(); err != nil {
+		slog.Warn("failed to load state", "error", err)
+	}
+
+	// Initialize GitHub client for checkers
+	ghClient, err := factory.NewGithubClient()
+	if err != nil {
+		return fmt.Errorf("failed to create GitHub client: %w", err)
+	}
+
+	checkers := map[string]checker.Checker{
+		"pr":    checker.NewPRChecker(ghClient),
+		"issue": checker.NewIssueChecker(ghClient),
+	}
+	openAction := &action.OpenBrowserAction{}
+
+	handler := NewHandler(state)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	ctx, cancel := donegroup.WithCancel(ctx)
+	defer cancel()
+
+	// Backup loop
+	donegroup.Go(ctx, func() error {
+		state.backupLoop(ctx)
+		return nil
+	})
+
+	// Polling loop
+	donegroup.Go(ctx, func() error {
+		pollLoop(ctx, state, checkers, openAction)
+		return nil
+	})
+
+	// Shutdown listener
+	donegroup.Go(ctx, func() error {
+		select {
+		case <-state.shutdownCh:
+			cancel()
+		case <-ctx.Done():
+		}
+		return nil
+	})
+
+	// Graceful shutdown via cleanup
+	if err := donegroup.Cleanup(ctx, func() error {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		return srv.Shutdown(shutdownCtx)
+	}); err != nil {
+		return fmt.Errorf("failed to register cleanup: %w", err)
+	}
+
+	slog.Info("server starting", "addr", addr, "pid", os.Getpid())
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		return fmt.Errorf("server error: %w", err)
+	}
+
+	if err := donegroup.WaitWithTimeout(ctx, 5*time.Second); err != nil {
+		slog.Error("shutdown error", "error", err)
+	}
+	slog.Info("server stopped")
+	return nil
+}
+
+func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Checker, act action.Action) {
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			CheckRules(ctx, state, checkers, act)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func CheckRules(ctx context.Context, state *State, checkers map[string]checker.Checker, act action.Action) {
+	rules := state.WatchingRules()
+	for _, r := range rules {
+		c, ok := checkers[r.Type]
+		if !ok {
+			continue
+		}
+
+		matched, err := c.Check(ctx, r)
+		if err != nil {
+			slog.Error("check failed", "rule_id", r.ID, "error", err)
+			continue
+		}
+		if matched {
+			slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+			if r.Action == "open" {
+				if err := act.Execute(r); err != nil {
+					slog.Error("action failed", "rule_id", r.ID, "error", err)
+				}
+			}
+			state.MarkTriggered(r.ID)
+			state.RemoveRule(r.ID)
+		}
+	}
+}

@@ -1,0 +1,84 @@
+package cmd
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/k1LoW/gh-wait/internal/rule"
+	"github.com/spf13/cobra"
+)
+
+var issueCmd = &cobra.Command{
+	Use:   "issue <number>",
+	Short: "Watch an issue for conditions",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		number, err := strconv.Atoi(args[0])
+		if err != nil {
+			return fmt.Errorf("invalid issue number: %w", err)
+		}
+
+		repo, _ := cmd.Flags().GetString("repo")
+		if repo == "" {
+			r, err := repository.Current()
+			if err != nil {
+				return fmt.Errorf("failed to detect repository (use --repo): %w", err)
+			}
+			repo = fmt.Sprintf("%s/%s", r.Owner, r.Name)
+		}
+
+		var conditions []string
+		for _, flag := range []string{"commented", "closed"} {
+			if v, _ := cmd.Flags().GetBool(flag); v {
+				conditions = append(conditions, flag)
+			}
+		}
+		if len(conditions) == 0 {
+			return fmt.Errorf("at least one condition flag is required (--commented, --closed)")
+		}
+
+		actionFlag := "notify"
+		if v, _ := cmd.Flags().GetBool("open"); v {
+			actionFlag = "open"
+		}
+
+		owner, repoName := rule.SplitRepo(repo)
+		url := fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repoName, number)
+
+		id := rule.GenerateID("issue", repo, number, conditions)
+		wr := &rule.WatchRule{
+			ID:         id,
+			Type:       "issue",
+			Repo:       repo,
+			Number:     number,
+			Conditions: conditions,
+			Action:     actionFlag,
+			URL:        url,
+			CreatedAt:  time.Now(),
+			Status:     "watching",
+		}
+
+		if err := ensureServer(); err != nil {
+			return err
+		}
+
+		c := newClient()
+		if err := c.AddRule(wr); err != nil {
+			return fmt.Errorf("failed to add rule: %w", err)
+		}
+
+		fmt.Printf("Watching Issue #%d on %s for: %s (action: %s)\n", number, repo, strings.Join(conditions, ", "), actionFlag)
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(issueCmd)
+	issueCmd.Flags().String("repo", "", "Repository (owner/repo)")
+	issueCmd.Flags().Bool("commented", false, "Watch for new comments")
+	issueCmd.Flags().Bool("closed", false, "Watch for close")
+	issueCmd.Flags().Bool("open", false, "Open in browser when condition is met")
+}
