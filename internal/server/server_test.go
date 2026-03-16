@@ -286,8 +286,8 @@ type mockChecker struct {
 	conditionResult map[string]bool // per-condition results for CheckConditions
 }
 
-func (m *mockChecker) Check(_ context.Context, r *rule.WatchRule) (bool, error) {
-	return m.CheckConditions(nil, r, r.Conditions)
+func (m *mockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+	return m.CheckConditions(ctx, r, r.Conditions)
 }
 
 func (m *mockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, conditions []string) (bool, error) {
