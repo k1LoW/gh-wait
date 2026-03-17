@@ -18,6 +18,10 @@ $ gh wait issue 456 --commented --open
 
 # Specify a repository explicitly
 $ gh wait pr 123 --approved --open --repo owner/repo
+
+# Custom polling interval
+$ gh wait pr 123 --approved --open --interval 5min
+$ gh wait issue 456 --commented --open --interval 1h
 ```
 
 ### Continuous Watch
@@ -66,9 +70,9 @@ $ gh wait restart
 ### List Output
 
 ```
-ID        TYPE  REPO           NUMBER  CONDITIONS  UNTIL   COUNT  ACTION  STATUS
-00a12cf6  pr    k1LoW/gh-wait  1       commented   closed  0/0    open    watching
-abc12345  pr    k1LoW/gh-wait  2       approved    merged  1/3    open    watching
+ID        TYPE  REPO           NUMBER  CONDITIONS  UNTIL   COUNT  INTERVAL  ACTION  STATUS
+00a12cf6  pr    k1LoW/gh-wait  1       commented   closed  0/0    30sec     open    watching
+abc12345  pr    k1LoW/gh-wait  2       approved    merged  1/3    5min      open    watching
 ```
 
 ## Supported Conditions
@@ -113,6 +117,7 @@ $ gh extension install k1LoW/gh-wait
 | `--open` | Open in browser when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
 
 ### `gh wait issue <number>`
 
@@ -124,6 +129,7 @@ $ gh extension install k1LoW/gh-wait
 | `--open` | Open in browser when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
 
 ### `gh wait list`
 
@@ -143,5 +149,5 @@ $ gh extension install k1LoW/gh-wait
 `gh-wait` uses a client-server architecture:
 
 1. **Background Server** — A lightweight HTTP server runs on `localhost:9248` (configurable). It is automatically started when you create your first watch rule.
-2. **Polling** — The server polls the GitHub API every 30 seconds to check conditions.
+2. **Polling** — The server polls the GitHub API at each rule's configured interval (default: 30 seconds) to check conditions.
 3. **State Persistence** — Rules are persisted to `$XDG_STATE_HOME/gh-wait/` (or `~/.local/state/gh-wait/`) and survive server restarts.
