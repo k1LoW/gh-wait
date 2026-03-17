@@ -11,6 +11,10 @@ import (
 type Checker interface {
 	Check(ctx context.Context, r *rule.WatchRule) (bool, error)
 	CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error)
+	// CheckState checks whether any of the given conditions currently hold,
+	// without state-transition tracking. Used for until (termination) conditions
+	// that should match whenever the state is true, not only on transitions.
+	CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error)
 }
 
 // shouldIgnoreUser reports whether login should be ignored based on

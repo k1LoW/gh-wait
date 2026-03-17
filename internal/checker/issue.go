@@ -34,6 +34,20 @@ func (c *IssueChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, c
 	return false, nil
 }
 
+func (c *IssueChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+	owner, repo := rule.SplitRepo(r.Repo)
+	for _, cond := range conditions {
+		matched, _, err := c.checkCondition(ctx, owner, repo, r, cond)
+		if err != nil {
+			return false, err
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (bool, string, error) {
 	switch cond {
 	case "commented":

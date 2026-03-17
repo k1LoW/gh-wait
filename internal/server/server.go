@@ -450,9 +450,11 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		r.LastCheckedAt = now
 		state.updateLastCheckedAt(r)
 
-		// Step 1: Check until (termination) conditions
+		// Step 1: Check until (termination) conditions.
+		// Use CheckState (no transition tracking) because until conditions
+		// should match whenever the state holds, not only on transitions.
 		if len(r.Until) > 0 {
-			untilMatched, err := c.CheckConditions(ctx, r, r.Until)
+			untilMatched, err := c.CheckState(ctx, r, r.Until)
 			if err != nil {
 				slog.Error("until check failed", "rule_id", r.ID, "error", err)
 				continue

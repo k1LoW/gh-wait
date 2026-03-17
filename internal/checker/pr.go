@@ -36,6 +36,20 @@ func (c *PRChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, cond
 	return false, nil
 }
 
+func (c *PRChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+	owner, repo := rule.SplitRepo(r.Repo)
+	for _, cond := range conditions {
+		matched, _, err := c.checkCondition(ctx, owner, repo, r, cond)
+		if err != nil {
+			return false, err
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // checkCondition returns (matched, stateKey, error).
 // stateKey is empty for event-based conditions (commented) — they bypass transition tracking.
 // stateKey is non-empty for state-based conditions — used to detect transitions.
