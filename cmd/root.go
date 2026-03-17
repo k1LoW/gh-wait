@@ -13,12 +13,13 @@ import (
 
 	"github.com/k1LoW/gh-wait/internal/client"
 	"github.com/k1LoW/gh-wait/internal/server"
+	"github.com/k1LoW/gh-wait/version"
 	"github.com/spf13/cobra"
 )
 
 const (
-	defaultPort        = 9248
-	probeTimeout       = 2 * time.Second
+	defaultPort         = 9248
+	probeTimeout        = 2 * time.Second
 	waitForReadyTimeout = 10 * time.Second
 )
 
@@ -98,6 +99,7 @@ server restarts.`,
 		return cmd.Help()
 	},
 	SilenceUsage: true,
+	Version:      version.Version,
 }
 
 func Execute() {
