@@ -24,7 +24,8 @@ type WatchRule struct {
 	MaxCount      int       `json:"max_count,omitempty"`     // 0=unlimited, N=end after N triggers
 	TriggerCount  int       `json:"trigger_count"`           // current trigger count
 	LastCheckedAt time.Time `json:"last_checked_at,omitzero"`
-	Interval      string    `json:"interval,omitempty"` // polling interval (e.g., "30sec", "5min", "1h")
+	Interval      string    `json:"interval,omitempty"`     // polling interval (e.g., "30sec", "5min", "1h")
+	IgnoreUsers   []string  `json:"ignore_users,omitempty"` // regex patterns of users to ignore
 }
 
 func GenerateID(typ, repo string, number int, conditions, until []string, maxCount int) string {

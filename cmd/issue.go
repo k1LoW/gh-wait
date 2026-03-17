@@ -39,6 +39,7 @@ var issueCmd = &cobra.Command{
 		}
 		until, _ := cmd.Flags().GetStringSlice("until")
 		count, _ := cmd.Flags().GetInt("count")
+		ignoreUsers, _ := cmd.Flags().GetStringSlice("ignore-user")
 		interval, _ := cmd.Flags().GetString("interval")
 		if _, err := duration.Parse(interval); err != nil {
 			return fmt.Errorf("invalid interval %q: %w", interval, err)
@@ -67,9 +68,10 @@ var issueCmd = &cobra.Command{
 			URL:        url,
 			CreatedAt:  time.Now(),
 			Status:     "watching",
-			Until:      until,
-			MaxCount:   count,
-			Interval:   interval,
+			Until:       until,
+			MaxCount:    count,
+			IgnoreUsers: ignoreUsers,
+			Interval:    interval,
 		}
 
 		if err := ensureServer(); err != nil {
@@ -94,5 +96,6 @@ func init() {
 	issueCmd.Flags().Bool("open", false, "Open in browser when condition is met")
 	issueCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed). Can be specified multiple times")
 	issueCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
+	issueCmd.Flags().StringSlice("ignore-user", nil, "Regex pattern of users to ignore (can be specified multiple times)")
 	issueCmd.Flags().String("interval", rule.DefaultIntervalStr, "Polling interval (e.g., 30sec, 5min, 1h)")
 }
