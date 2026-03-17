@@ -26,8 +26,9 @@ type WatchRule struct {
 	MaxCount      int       `json:"max_count,omitempty"`     // 0=unlimited, N=end after N triggers
 	TriggerCount  int       `json:"trigger_count"`           // current trigger count
 	LastCheckedAt time.Time `json:"last_checked_at,omitzero"`
-	Interval      string    `json:"interval,omitempty"`     // polling interval (e.g., "30sec", "5min", "1h")
-	IgnoreUsers   []string  `json:"ignore_users,omitempty"` // regex patterns of users to ignore
+	Interval      string            `json:"interval,omitempty"`      // polling interval (e.g., "30sec", "5min", "1h")
+	IgnoreUsers   []string          `json:"ignore_users,omitempty"`  // regex patterns of users to ignore
+	FiredStates   map[string]string `json:"fired_states,omitempty"`  // state-based condition dedup (condition -> stateKey)
 
 	ignoreUsersOnce    sync.Once        `json:"-"`
 	compiledIgnoreUsers []*regexp.Regexp `json:"-"`
@@ -91,6 +92,29 @@ func (r *WatchRule) PollInterval() time.Duration {
 		return DefaultInterval
 	}
 	return d
+}
+
+// HasFiredForState returns true if the condition has already fired with the given stateKey.
+func (r *WatchRule) HasFiredForState(condition, stateKey string) bool {
+	if r.FiredStates == nil {
+		return false
+	}
+	return r.FiredStates[condition] == stateKey
+}
+
+// RecordFiredState marks a condition as fired with the given stateKey.
+func (r *WatchRule) RecordFiredState(condition, stateKey string) {
+	if r.FiredStates == nil {
+		r.FiredStates = make(map[string]string)
+	}
+	r.FiredStates[condition] = stateKey
+}
+
+// ClearFiredState removes a condition from fired states (e.g., state reverted).
+func (r *WatchRule) ClearFiredState(condition string) {
+	if r.FiredStates != nil {
+		delete(r.FiredStates, condition)
+	}
 }
 
 func SplitRepo(repo string) (string, string) {
