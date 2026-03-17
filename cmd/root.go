@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/k1LoW/gh-wait/internal/client"
@@ -87,10 +89,101 @@ server restarts.`,
 }
 
 func Execute() {
+	if transformed, ok := transformURLArgs(os.Args[1:]); ok {
+		rootCmd.SetArgs(transformed)
+	}
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+// transformURLArgs detects a GitHub PR/issue URL in the arguments and
+// rewrites them into the equivalent subcommand form so that Cobra routes
+// to the correct handler.
+//
+//	gh-wait https://github.com/owner/repo/pull/42 --approved
+//	  → pr 42 --repo owner/repo --approved
+//
+//	gh-wait https://github.com/owner/repo/issues/5 --commented
+//	  → issue 5 --repo owner/repo --commented
+func transformURLArgs(args []string) ([]string, bool) {
+	if len(args) == 0 {
+		return nil, false
+	}
+
+	// Find the first positional arg (skip flags and their values).
+	// We only transform when it appears in the position where a subcommand
+	// would normally go (i.e. the first non-flag argument).
+	var urlIdx int = -1
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") {
+			// Skip flag value if it looks like --key=val already has the value.
+			if !strings.Contains(a, "=") {
+				// Peek: if next arg doesn't start with "-", treat it as the flag value.
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++ // skip value
+				}
+			}
+			continue
+		}
+		urlIdx = i
+		break
+	}
+	if urlIdx < 0 {
+		return nil, false
+	}
+
+	subcommand, repo, number, ok := parseGitHubURL(args[urlIdx])
+	if !ok {
+		return nil, false
+	}
+
+	// Build transformed args: subcommand, number, --repo, owner/repo, then the rest.
+	newArgs := make([]string, 0, len(args)+3)
+	newArgs = append(newArgs, args[:urlIdx]...)           // flags before the URL
+	newArgs = append(newArgs, subcommand, strconv.Itoa(number), "--repo", repo)
+	newArgs = append(newArgs, args[urlIdx+1:]...)         // remaining flags
+	return newArgs, true
+}
+
+// parseGitHubURL extracts the subcommand ("pr" or "issue"), "owner/repo",
+// and the number from a GitHub URL.  Returns ok=false if the URL is not a
+// recognised PR or issue URL.
+func parseGitHubURL(raw string) (subcommand, repo string, number int, ok bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", "", 0, false
+	}
+
+	// Accept github.com and GitHub Enterprise hosts.
+	// Path format: /{owner}/{repo}/pull/{number} or /{owner}/{repo}/issues/{number}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 4 {
+		return "", "", 0, false
+	}
+
+	owner := parts[0]
+	repoName := parts[1]
+	kind := parts[2]  // "pull" or "issues"
+	numStr := parts[3]
+
+	n, err := strconv.Atoi(numStr)
+	if err != nil || n <= 0 {
+		return "", "", 0, false
+	}
+
+	switch kind {
+	case "pull":
+		subcommand = "pr"
+	case "issues":
+		subcommand = "issue"
+	default:
+		return "", "", 0, false
+	}
+
+	return subcommand, owner + "/" + repoName, n, true
 }
 
 func init() {
