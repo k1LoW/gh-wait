@@ -40,8 +40,10 @@ var listCmd = &cobra.Command{
 				untilStr = strings.Join(r.Until, ",")
 			}
 			countStr := "-"
-			if r.MaxCount > 0 || len(r.Until) > 0 {
+			if r.MaxCount > 0 {
 				countStr = fmt.Sprintf("%d/%d", r.TriggerCount, r.MaxCount)
+			} else if len(r.Until) > 0 {
+				countStr = fmt.Sprintf("%d", r.TriggerCount)
 			}
 			intervalStr := r.Interval
 			if intervalStr == "" {
