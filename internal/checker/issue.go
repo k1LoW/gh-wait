@@ -8,11 +8,12 @@ import (
 )
 
 type IssueChecker struct {
-	client *github.Client
+	client      *github.Client
+	currentUser string
 }
 
-func NewIssueChecker(client *github.Client) *IssueChecker {
-	return &IssueChecker{client: client}
+func NewIssueChecker(client *github.Client, currentUser string) *IssueChecker {
+	return &IssueChecker{client: client, currentUser: currentUser}
 }
 
 func (c *IssueChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
@@ -42,13 +43,15 @@ func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r
 		if err != nil {
 			return false, skipNotFound(err)
 		}
-		return len(comments) > 0, nil
-	case "closed":
-		issue, _, err := c.client.Issues.Get(ctx, owner, repo, r.Number)
-		if err != nil {
-			return false, skipNotFound(err)
+		for _, comment := range comments {
+			if isSelf(c.currentUser, comment.GetUser().GetLogin()) {
+				continue
+			}
+			return true, nil
 		}
-		return issue.GetState() == "closed", nil
+		return false, nil
+	case "closed":
+		return checkClosed(c.client, c.currentUser, ctx, owner, repo, r.Number)
 	}
 	return false, nil
 }

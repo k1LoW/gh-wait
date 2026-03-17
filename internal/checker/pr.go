@@ -10,11 +10,12 @@ import (
 )
 
 type PRChecker struct {
-	client *github.Client
+	client      *github.Client
+	currentUser string
 }
 
-func NewPRChecker(client *github.Client) *PRChecker {
-	return &PRChecker{client: client}
+func NewPRChecker(client *github.Client, currentUser string) *PRChecker {
+	return &PRChecker{client: client, currentUser: currentUser}
 }
 
 func (c *PRChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
@@ -42,7 +43,7 @@ func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *r
 	case "merged":
 		return c.checkMerged(ctx, owner, repo, r.Number)
 	case "closed":
-		return c.checkClosed(ctx, owner, repo, r.Number)
+		return checkClosed(c.client, c.currentUser, ctx, owner, repo, r.Number)
 	case "ci-finished":
 		return c.checkCIFinished(ctx, owner, repo, r.Number)
 	case "ci-failed":
@@ -60,6 +61,9 @@ func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, numbe
 	}
 	for _, review := range reviews {
 		if review.GetState() == "APPROVED" {
+			if isSelf(c.currentUser, review.GetUser().GetLogin()) {
+				continue
+			}
 			return true, nil
 		}
 	}
@@ -71,15 +75,13 @@ func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, number 
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	return pr.GetMerged(), nil
-}
-
-func (c *PRChecker) checkClosed(ctx context.Context, owner, repo string, number int) (bool, error) {
-	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, number)
-	if err != nil {
-		return false, skipNotFound(err)
+	if !pr.GetMerged() {
+		return false, nil
 	}
-	return pr.GetState() == "closed", nil
+	if isSelf(c.currentUser, pr.GetMergedBy().GetLogin()) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (c *PRChecker) checkCIFinished(ctx context.Context, owner, repo string, number int) (bool, error) {
@@ -151,7 +153,10 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	if len(issueComments) > 0 {
+	for _, comment := range issueComments {
+		if isSelf(c.currentUser, comment.GetUser().GetLogin()) {
+			continue
+		}
 		return true, nil
 	}
 
@@ -160,7 +165,10 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	if len(reviewComments) > 0 {
+	for _, comment := range reviewComments {
+		if isSelf(c.currentUser, comment.GetUser().GetLogin()) {
+			continue
+		}
 		return true, nil
 	}
 
@@ -170,6 +178,9 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	}
 	for _, review := range reviews {
 		if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
+			if isSelf(c.currentUser, review.GetUser().GetLogin()) {
+				continue
+			}
 			return true, nil
 		}
 	}
