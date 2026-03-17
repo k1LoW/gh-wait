@@ -348,9 +348,18 @@ func Run(ctx context.Context, addr string, port int) error {
 		return fmt.Errorf("failed to create GitHub client: %w", err)
 	}
 
+	// Get current authenticated user to ignore self-triggered events
+	var currentUser string
+	if u, _, err := ghClient.Users.Get(ctx, ""); err == nil {
+		currentUser = u.GetLogin()
+		slog.Info("authenticated user", "login", currentUser)
+	} else {
+		slog.Warn("failed to get authenticated user, self-filtering disabled", "error", err)
+	}
+
 	checkers := map[string]checker.Checker{
-		"pr":    checker.NewPRChecker(ghClient),
-		"issue": checker.NewIssueChecker(ghClient),
+		"pr":    checker.NewPRChecker(ghClient, currentUser),
+		"issue": checker.NewIssueChecker(ghClient, currentUser),
 	}
 	openAction := &action.OpenBrowserAction{}
 

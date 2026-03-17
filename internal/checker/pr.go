@@ -10,11 +10,12 @@ import (
 )
 
 type PRChecker struct {
-	client *github.Client
+	client      *github.Client
+	currentUser string
 }
 
-func NewPRChecker(client *github.Client) *PRChecker {
-	return &PRChecker{client: client}
+func NewPRChecker(client *github.Client, currentUser string) *PRChecker {
+	return &PRChecker{client: client, currentUser: currentUser}
 }
 
 func (c *PRChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
@@ -60,6 +61,9 @@ func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, numbe
 	}
 	for _, review := range reviews {
 		if review.GetState() == "APPROVED" {
+			if c.currentUser != "" && review.GetUser().GetLogin() == c.currentUser {
+				continue
+			}
 			return true, nil
 		}
 	}
@@ -71,15 +75,28 @@ func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, number 
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	return pr.GetMerged(), nil
+	if !pr.GetMerged() {
+		return false, nil
+	}
+	if c.currentUser != "" && pr.GetMergedBy().GetLogin() == c.currentUser {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (c *PRChecker) checkClosed(ctx context.Context, owner, repo string, number int) (bool, error) {
-	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, number)
+	// Use Issues API to access ClosedBy field (not available in PullRequests API)
+	issue, _, err := c.client.Issues.Get(ctx, owner, repo, number)
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	return pr.GetState() == "closed", nil
+	if issue.GetState() != "closed" {
+		return false, nil
+	}
+	if c.currentUser != "" && issue.GetClosedBy().GetLogin() == c.currentUser {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (c *PRChecker) checkCIFinished(ctx context.Context, owner, repo string, number int) (bool, error) {
@@ -151,7 +168,10 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	if len(issueComments) > 0 {
+	for _, comment := range issueComments {
+		if c.currentUser != "" && comment.GetUser().GetLogin() == c.currentUser {
+			continue
+		}
 		return true, nil
 	}
 
@@ -160,7 +180,10 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	if len(reviewComments) > 0 {
+	for _, comment := range reviewComments {
+		if c.currentUser != "" && comment.GetUser().GetLogin() == c.currentUser {
+			continue
+		}
 		return true, nil
 	}
 
@@ -170,6 +193,9 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	}
 	for _, review := range reviews {
 		if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
+			if c.currentUser != "" && review.GetUser().GetLogin() == c.currentUser {
+				continue
+			}
 			return true, nil
 		}
 	}
