@@ -43,7 +43,7 @@ func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *r
 	case "merged":
 		return c.checkMerged(ctx, owner, repo, r)
 	case "closed":
-		return checkClosed(c.client, c.currentUser, r.IgnoreUsers, ctx, owner, repo, r.Number)
+		return checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number)
 	case "ci-finished":
 		return c.checkCIFinished(ctx, owner, repo, r.Number)
 	case "ci-failed":
@@ -61,7 +61,7 @@ func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *ru
 	}
 	for _, review := range reviews {
 		if review.GetState() == "APPROVED" {
-			if shouldIgnoreUser(c.currentUser, r.IgnoreUsers, review.GetUser().GetLogin()) {
+			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil
@@ -78,7 +78,7 @@ func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, r *rule
 	if !pr.GetMerged() {
 		return false, nil
 	}
-	if shouldIgnoreUser(c.currentUser, r.IgnoreUsers, pr.GetMergedBy().GetLogin()) {
+	if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), pr.GetMergedBy().GetLogin()) {
 		return false, nil
 	}
 	return true, nil
@@ -154,7 +154,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 		return false, skipNotFound(err)
 	}
 	for _, comment := range issueComments {
-		if shouldIgnoreUser(c.currentUser, r.IgnoreUsers, comment.GetUser().GetLogin()) {
+		if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 			continue
 		}
 		return true, nil
@@ -166,7 +166,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 		return false, skipNotFound(err)
 	}
 	for _, comment := range reviewComments {
-		if shouldIgnoreUser(c.currentUser, r.IgnoreUsers, comment.GetUser().GetLogin()) {
+		if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 			continue
 		}
 		return true, nil
@@ -178,7 +178,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	}
 	for _, review := range reviews {
 		if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
-			if shouldIgnoreUser(c.currentUser, r.IgnoreUsers, review.GetUser().GetLogin()) {
+			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil

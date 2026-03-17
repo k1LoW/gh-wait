@@ -3,8 +3,10 @@ package rule
 import (
 	"crypto/sha256"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/k1LoW/duration"
@@ -26,16 +28,37 @@ type WatchRule struct {
 	LastCheckedAt time.Time `json:"last_checked_at,omitzero"`
 	Interval      string    `json:"interval,omitempty"`     // polling interval (e.g., "30sec", "5min", "1h")
 	IgnoreUsers   []string  `json:"ignore_users,omitempty"` // regex patterns of users to ignore
+
+	ignoreUsersOnce    sync.Once        `json:"-"`
+	compiledIgnoreUsers []*regexp.Regexp `json:"-"`
 }
 
-func GenerateID(typ, repo string, number int, conditions, until []string, maxCount int) string {
+// CompiledIgnoreUsers returns pre-compiled regexps for IgnoreUsers patterns.
+// Invalid patterns are silently skipped (validated at rule creation time).
+func (r *WatchRule) CompiledIgnoreUsers() []*regexp.Regexp {
+	r.ignoreUsersOnce.Do(func() {
+		for _, pattern := range r.IgnoreUsers {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				continue
+			}
+			r.compiledIgnoreUsers = append(r.compiledIgnoreUsers, re)
+		}
+	})
+	return r.compiledIgnoreUsers
+}
+
+func GenerateID(typ, repo string, number int, conditions, until []string, maxCount int, ignoreUsers []string) string {
 	sorted := make([]string, len(conditions))
 	copy(sorted, conditions)
 	sort.Strings(sorted)
 	sortedUntil := make([]string, len(until))
 	copy(sortedUntil, until)
 	sort.Strings(sortedUntil)
-	key := fmt.Sprintf("%s:%s:%d:%s:until=%s:max=%d", typ, repo, number, strings.Join(sorted, ","), strings.Join(sortedUntil, ","), maxCount)
+	sortedIgnore := make([]string, len(ignoreUsers))
+	copy(sortedIgnore, ignoreUsers)
+	sort.Strings(sortedIgnore)
+	key := fmt.Sprintf("%s:%s:%d:%s:until=%s:max=%d:ignore=%s", typ, repo, number, strings.Join(sorted, ","), strings.Join(sortedUntil, ","), maxCount, strings.Join(sortedIgnore, ","))
 	h := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("%x", h[:4])
 }

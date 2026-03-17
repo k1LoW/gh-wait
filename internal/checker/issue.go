@@ -44,14 +44,14 @@ func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r
 			return false, skipNotFound(err)
 		}
 		for _, comment := range comments {
-			if shouldIgnoreUser(c.currentUser, r.IgnoreUsers, comment.GetUser().GetLogin()) {
+			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil
 		}
 		return false, nil
 	case "closed":
-		return checkClosed(c.client, c.currentUser, r.IgnoreUsers, ctx, owner, repo, r.Number)
+		return checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number)
 	}
 	return false, nil
 }
