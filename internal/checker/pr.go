@@ -23,17 +23,11 @@ func (c *PRChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) 
 }
 
 func (c *PRChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
-	owner, repo := rule.SplitRepo(r.Repo)
-	for _, cond := range conditions {
-		matched, stateKey, err := c.checkCondition(ctx, owner, repo, r, cond)
-		if err != nil {
-			return false, err
-		}
-		if checkWithTransition(r, cond, matched, stateKey) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return evalConditions(ctx, r, conditions, c.checkCondition, true)
+}
+
+func (c *PRChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
 // checkCondition returns (matched, stateKey, error).

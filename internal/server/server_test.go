@@ -302,6 +302,10 @@ func (m *mockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, cond
 	return false, m.err
 }
 
+func (m *mockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+	return m.CheckConditions(ctx, r, conditions)
+}
+
 type mockAction struct {
 	executed []string
 }

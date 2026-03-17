@@ -21,17 +21,11 @@ func (c *IssueChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, erro
 }
 
 func (c *IssueChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
-	owner, repo := rule.SplitRepo(r.Repo)
-	for _, cond := range conditions {
-		matched, stateKey, err := c.checkCondition(ctx, owner, repo, r, cond)
-		if err != nil {
-			return false, err
-		}
-		if checkWithTransition(r, cond, matched, stateKey) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return evalConditions(ctx, r, conditions, c.checkCondition, true)
+}
+
+func (c *IssueChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
 func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (bool, string, error) {
