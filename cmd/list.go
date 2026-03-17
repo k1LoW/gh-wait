@@ -16,6 +16,27 @@ var jsonOutput bool
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List watch rules",
+	Long: `List all watch rules registered on the gh-wait server.
+
+By default, output is a human-readable table with columns:
+  ID, TYPE, REPO, NUMBER, CONDITIONS, UNTIL, COUNT, INTERVAL, ACTION, STATUS
+
+Use --json to output the rules as a JSON array for programmatic use.
+
+Rules have one of the following statuses:
+  watching   — Actively polling for conditions.
+  triggered  — Condition was met and action was executed.
+  stopped    — Rule was terminated by an --until condition or --count limit.
+
+The server must be running for this command to work.`,
+	Example: `  # List all rules in table format
+  gh wait list
+
+  # List all rules as JSON
+  gh wait list --json
+
+  # Pipe JSON output to jq
+  gh wait list --json | jq '.[] | select(.status == "watching")'`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := newClient()
 		rules, err := c.ListRules()

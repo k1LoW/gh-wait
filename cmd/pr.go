@@ -18,7 +18,64 @@ import (
 var prCmd = &cobra.Command{
 	Use:   "pr [number]",
 	Short: "Watch a pull request for conditions",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Watch a pull request for one or more conditions and trigger an action
+when any condition is met.
+
+If no PR number is given, gh-wait auto-detects the PR associated with
+the current branch using "gh pr view".
+
+Available conditions (at least one condition or --until is required):
+  --approved      Triggered when the PR receives a new approval review.
+  --merged        Triggered when the PR is merged.
+  --closed        Triggered when the PR is closed (without merge).
+  --commented     Triggered when a new comment, review comment, or review
+                  with body is posted on the PR.
+  --ci-finished   Triggered when all CI checks and commit statuses reach
+                  a completed state (none pending).
+  --ci-failed     Triggered when any CI check or commit status fails.
+
+Multiple conditions are evaluated with OR logic — the rule triggers when
+any one of the specified conditions is met.
+
+Actions:
+  By default, a desktop notification is sent. Use --open to instead open
+  the PR in your default browser.
+
+Termination:
+  By default, a rule triggers once and stops. Use --count to allow
+  multiple triggers, or --until to keep watching until a termination
+  condition is met (e.g., --until merged). --until accepts the same
+  condition names as the watch flags.
+
+Polling:
+  The server polls the GitHub API at the interval specified by --interval
+  (default: 30sec). Accepts durations like 30sec, 5min, 1h.
+
+Filtering:
+  Use --ignore-user to exclude events from specific users. The value is
+  a Go regular expression matched against the username. Can be specified
+  multiple times.`,
+	Example: `  # Watch the current branch's PR for approval
+  gh wait pr --approved
+
+  # Watch PR #42 for merge, open browser when merged
+  gh wait pr 42 --merged --open
+
+  # Watch PR for comments, stop when merged
+  gh wait pr 42 --commented --until merged
+
+  # Watch PR for CI completion with 1-minute polling
+  gh wait pr 42 --ci-finished --interval 1min
+
+  # Watch PR for approval, trigger up to 3 times, stop when closed
+  gh wait pr 42 --approved --count 3 --until closed
+
+  # Ignore bot users when watching for comments
+  gh wait pr 42 --commented --ignore-user ".*\\[bot\\]" --ignore-user "dependabot"
+
+  # Watch PR on a different repo
+  gh wait pr 10 --approved --repo owner/repo`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var number int
 		if len(args) > 0 {

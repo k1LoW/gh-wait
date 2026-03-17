@@ -28,7 +28,55 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "gh-wait",
 	Short: "Wait for GitHub events and get notified",
-	Long:  `gh-wait watches for GitHub events (PR approvals, merges, comments, etc.) and notifies you when conditions are met.`,
+	Long: `gh-wait is a GitHub CLI extension that watches pull requests and issues
+for specific conditions (approvals, merges, CI completion, comments, etc.)
+and triggers actions (desktop notification, open in browser) when those
+conditions are met.
+
+It uses a client-server architecture: a background server polls the GitHub
+API at configurable intervals and evaluates watch rules. The server is
+automatically started when you create the first watch rule.
+
+Multiple conditions on a single rule are evaluated with OR logic — if any
+condition is met, the rule triggers. Use --until to set termination
+conditions so the rule automatically stops watching.
+
+Watch rules and server state are persisted to disk, so rules survive
+server restarts.`,
+	Example: `  # Watch the current branch's PR for approval, open browser when approved
+  gh wait pr --approved --open
+
+  # Watch PR #42 for merge or close
+  gh wait pr 42 --merged --closed
+
+  # Watch PR #42 for comments, stop watching when merged, poll every 1 min
+  gh wait pr 42 --commented --until merged --interval 1min
+
+  # Watch PR #10 for CI completion, trigger at most 3 times
+  gh wait pr 10 --ci-finished --count 3
+
+  # Watch PR for approval, ignoring bot users
+  gh wait pr 42 --approved --ignore-user ".*\\[bot\\]"
+
+  # Watch issue #5 for new comments on a specific repo
+  gh wait issue 5 --commented --repo owner/repo
+
+  # List all watch rules
+  gh wait list
+
+  # List all watch rules in JSON format
+  gh wait list --json
+
+  # Delete a specific rule by ID
+  gh wait delete abc1234
+
+  # Delete all rules
+  gh wait delete --all
+
+  # Manage the background server
+  gh wait start
+  gh wait stop
+  gh wait restart`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if foreground {
 			return runForeground(cmd.Context())
