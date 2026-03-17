@@ -33,6 +33,8 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/k1LoW/donegroup v1.10.3 h1:+FPxE8MSxgqsdkxj8Y8hfFF1rHooh04pdl1441EeylQ=
 github.com/k1LoW/donegroup v1.10.3/go.mod h1:I/s+pK8/noQoE7lY3ecYwhXOBvcKGYOBeKtSBlM6IXk=
+github.com/k1LoW/duration v1.2.0 h1:qq1gWtPh7YROFyerBufVP+ATR11mOOHDInrcC/Xe/6A=
+github.com/k1LoW/duration v1.2.0/go.mod h1:qUa0NptIiUl5EUsCc8wIiSaHuNjS4wmpYNMHp0l6pos=
 github.com/k1LoW/go-github-client/v83 v83.0.21 h1:kKAUxgyfVdSDFrihZZR/ZOpHt4ooklcRcPdUCzbL6xc=
 github.com/k1LoW/go-github-client/v83 v83.0.21/go.mod h1:xPkMW+KN28VO3yU2by4GMA0LF/jVHJgnwfsBXge6hdM=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=

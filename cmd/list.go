@@ -7,6 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/k1LoW/gh-wait/internal/rule"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +33,7 @@ var listCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTYPE\tREPO\tNUMBER\tCONDITIONS\tUNTIL\tCOUNT\tACTION\tSTATUS")
+		fmt.Fprintln(w, "ID\tTYPE\tREPO\tNUMBER\tCONDITIONS\tUNTIL\tCOUNT\tINTERVAL\tACTION\tSTATUS")
 		for _, r := range rules {
 			untilStr := "-"
 			if len(r.Until) > 0 {
@@ -42,9 +43,13 @@ var listCmd = &cobra.Command{
 			if r.MaxCount > 0 || len(r.Until) > 0 {
 				countStr = fmt.Sprintf("%d/%d", r.TriggerCount, r.MaxCount)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n",
+			intervalStr := r.Interval
+			if intervalStr == "" {
+				intervalStr = rule.DefaultIntervalStr
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				r.ID, r.Type, r.Repo, r.Number,
-				strings.Join(r.Conditions, ","), untilStr, countStr, r.Action, r.Status)
+				strings.Join(r.Conditions, ","), untilStr, countStr, intervalStr, r.Action, r.Status)
 		}
 		return w.Flush()
 	},

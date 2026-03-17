@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	pollInterval  = 30 * time.Second
-	backupDelay   = 1 * time.Second
+	pollTick    = 1 * time.Second
+	backupDelay = 1 * time.Second
 )
 
 type State struct {
@@ -84,6 +84,18 @@ func (s *State) UpdateRule(r *rule.WatchRule) {
 		if existing.ID == r.ID {
 			s.rules[i] = r
 			s.notifyBackup()
+			return
+		}
+	}
+}
+
+// updateLastCheckedAt updates only LastCheckedAt without triggering a backup.
+func (s *State) updateLastCheckedAt(r *rule.WatchRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, existing := range s.rules {
+		if existing.ID == r.ID {
+			s.rules[i].LastCheckedAt = r.LastCheckedAt
 			return
 		}
 	}
@@ -396,7 +408,7 @@ func Run(ctx context.Context, addr string, port int) error {
 }
 
 func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Checker, act action.Action) {
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(pollTick)
 	defer ticker.Stop()
 
 	for {
@@ -413,10 +425,21 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 	rules := state.WatchingRules()
 	now := time.Now()
 	for _, r := range rules {
+		// Skip if the rule's polling interval hasn't elapsed
+		interval := r.PollInterval()
+		if !r.LastCheckedAt.IsZero() && now.Sub(r.LastCheckedAt) < interval {
+			continue
+		}
+
 		c, ok := checkers[r.Type]
 		if !ok {
 			continue
 		}
+
+		// Update LastCheckedAt unconditionally for interval scheduling.
+		// Use updateLastCheckedAt to avoid triggering backup on every tick.
+		r.LastCheckedAt = now
+		state.updateLastCheckedAt(r)
 
 		// Step 1: Check until (termination) conditions
 		if len(r.Until) > 0 {
@@ -452,7 +475,6 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			executeAction(act, r)
 
 			r.TriggerCount++
-			r.LastCheckedAt = now
 			state.UpdateRule(r)
 
 			// Step 3: Determine if rule should be removed
