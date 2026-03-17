@@ -35,16 +35,18 @@ func shouldIgnoreUser(currentUser string, compiled []*regexp.Regexp, login strin
 }
 
 // checkConditionFunc is the signature of a per-checker condition evaluator.
-type checkConditionFunc func(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (matched bool, stateKey string, err error)
+// When skipUserFilter is true, shouldIgnoreUser checks are skipped (used for until/termination conditions).
+type checkConditionFunc func(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (matched bool, stateKey string, err error)
 
 // evalConditions iterates conditions, calling checkFn for each.
 // When trackTransition is true, state-transition tracking is applied so that
 // state-based conditions only fire once per transition. When false, the raw
-// match result is used (suitable for until/termination checks).
+// match result is used and user filtering is skipped (suitable for until/termination checks).
 func evalConditions(ctx context.Context, r *rule.WatchRule, conditions []string, checkFn checkConditionFunc, trackTransition bool) (bool, error) {
+	skipUserFilter := !trackTransition
 	owner, repo := rule.SplitRepo(r.Repo)
 	for _, cond := range conditions {
-		matched, stateKey, err := checkFn(ctx, owner, repo, r, cond)
+		matched, stateKey, err := checkFn(ctx, owner, repo, r, cond, skipUserFilter)
 		if err != nil {
 			return false, err
 		}
@@ -84,7 +86,7 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 }
 
 // checkClosed checks whether the issue/PR is closed by someone other than an ignored user.
-func checkClosed(ctx context.Context, client *github.Client, currentUser string, compiled []*regexp.Regexp, owner, repo string, number int) (bool, error) {
+func checkClosed(ctx context.Context, client *github.Client, currentUser string, compiled []*regexp.Regexp, owner, repo string, number int, skipUserFilter bool) (bool, error) {
 	issue, _, err := client.Issues.Get(ctx, owner, repo, number)
 	if err != nil {
 		return false, skipNotFound(err)
@@ -92,7 +94,7 @@ func checkClosed(ctx context.Context, client *github.Client, currentUser string,
 	if issue.GetState() != "closed" {
 		return false, nil
 	}
-	if shouldIgnoreUser(currentUser, compiled, issue.GetClosedBy().GetLogin()) {
+	if !skipUserFilter && shouldIgnoreUser(currentUser, compiled, issue.GetClosedBy().GetLogin()) {
 		return false, nil
 	}
 	return true, nil
