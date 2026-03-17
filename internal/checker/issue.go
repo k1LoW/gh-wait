@@ -44,24 +44,14 @@ func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r
 			return false, skipNotFound(err)
 		}
 		for _, comment := range comments {
-			if c.currentUser != "" && comment.GetUser().GetLogin() == c.currentUser {
+			if isSelf(c.currentUser, comment.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil
 		}
 		return false, nil
 	case "closed":
-		issue, _, err := c.client.Issues.Get(ctx, owner, repo, r.Number)
-		if err != nil {
-			return false, skipNotFound(err)
-		}
-		if issue.GetState() != "closed" {
-			return false, nil
-		}
-		if c.currentUser != "" && issue.GetClosedBy().GetLogin() == c.currentUser {
-			return false, nil
-		}
-		return true, nil
+		return checkClosed(c.client, c.currentUser, ctx, owner, repo, r.Number)
 	}
 	return false, nil
 }
