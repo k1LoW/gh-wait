@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/k1LoW/duration"
 	"github.com/k1LoW/gh-wait/internal/rule"
 	"github.com/spf13/cobra"
 )
@@ -38,6 +39,10 @@ var prCmd = &cobra.Command{
 		}
 		until, _ := cmd.Flags().GetStringSlice("until")
 		count, _ := cmd.Flags().GetInt("count")
+		interval, _ := cmd.Flags().GetString("interval")
+		if _, err := duration.Parse(interval); err != nil {
+			return fmt.Errorf("invalid interval %q: %w", interval, err)
+		}
 
 		if len(conditions) == 0 && len(until) == 0 {
 			return fmt.Errorf("at least one condition flag or --until is required (--approved, --merged, --closed, --commented, --ci-finished, --ci-failed, --until)")
@@ -64,6 +69,7 @@ var prCmd = &cobra.Command{
 			Status:     "watching",
 			Until:      until,
 			MaxCount:   count,
+			Interval:   interval,
 		}
 
 		if err := ensureServer(); err != nil {
@@ -92,4 +98,5 @@ func init() {
 	prCmd.Flags().Bool("open", false, "Open in browser when condition is met")
 	prCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed, merged). Can be specified multiple times")
 	prCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
+	prCmd.Flags().String("interval", "30sec", "Polling interval (e.g., 30sec, 5min, 1h)")
 }

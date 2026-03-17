@@ -475,6 +475,7 @@ func TestCheckRulesMaxCount(t *testing.T) {
 		Conditions:   []string{"commented"},
 		MaxCount:     2,
 		TriggerCount: 0,
+		Interval:     "0s",
 	})
 
 	mc := &mockChecker{conditionResult: map[string]bool{"commented": true}}

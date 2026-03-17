@@ -6,6 +6,7 @@ require (
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/google/go-github/v83 v83.0.0
 	github.com/k1LoW/donegroup v1.10.3
+	github.com/k1LoW/duration v1.2.0
 	github.com/k1LoW/go-github-client/v83 v83.0.21
 	github.com/spf13/cobra v1.10.2
 )

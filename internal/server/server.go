@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	pollInterval  = 30 * time.Second
-	backupDelay   = 1 * time.Second
+	pollTick    = 1 * time.Second
+	backupDelay = 1 * time.Second
 )
 
 type State struct {
@@ -396,7 +396,7 @@ func Run(ctx context.Context, addr string, port int) error {
 }
 
 func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Checker, act action.Action) {
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(pollTick)
 	defer ticker.Stop()
 
 	for {
@@ -413,6 +413,12 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 	rules := state.WatchingRules()
 	now := time.Now()
 	for _, r := range rules {
+		// Skip if the rule's polling interval hasn't elapsed
+		interval := r.PollInterval()
+		if !r.LastCheckedAt.IsZero() && now.Sub(r.LastCheckedAt) < interval {
+			continue
+		}
+
 		c, ok := checkers[r.Type]
 		if !ok {
 			continue
@@ -445,6 +451,8 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		matched, err := c.Check(ctx, r)
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
+			r.LastCheckedAt = now
+			state.UpdateRule(r)
 			continue
 		}
 		if matched {
@@ -460,6 +468,9 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 				state.MarkTriggered(r.ID)
 				state.RemoveRule(r.ID)
 			}
+		} else {
+			r.LastCheckedAt = now
+			state.UpdateRule(r)
 		}
 	}
 }
