@@ -35,6 +35,12 @@ for specific conditions (approvals, merges, CI completion, comments, etc.)
 and triggers actions (desktop notification, open in browser) when those
 conditions are met.
 
+You can pass a GitHub PR or issue URL directly instead of using
+subcommands — gh-wait will auto-detect the type:
+
+  gh wait https://github.com/owner/repo/pull/42 --approved --open
+  gh wait https://github.com/owner/repo/issues/5 --commented
+
 It uses a client-server architecture: a background server polls the GitHub
 API at configurable intervals and evaluates watch rules. The server is
 automatically started when you create the first watch rule.
@@ -45,7 +51,13 @@ conditions so the rule automatically stops watching.
 
 Watch rules and server state are persisted to disk, so rules survive
 server restarts.`,
-	Example: `  # Watch the current branch's PR for approval, open browser when approved
+	Example: `  # Watch a PR by URL
+  gh wait https://github.com/owner/repo/pull/42 --approved --open
+
+  # Watch an issue by URL
+  gh wait https://github.com/owner/repo/issues/5 --commented
+
+  # Watch the current branch's PR for approval, open browser when approved
   gh wait pr --approved --open
 
   # Watch PR #42 for merge or close
