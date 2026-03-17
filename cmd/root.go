@@ -120,44 +120,25 @@ func Execute() {
 //	gh-wait https://github.com/owner/repo/issues/5 --commented
 //	  → issue 5 --repo owner/repo --commented
 func transformURLArgs(args []string) ([]string, bool) {
-	if len(args) == 0 {
-		return nil, false
-	}
-
-	// Find the first positional arg (skip flags and their values).
-	// We only transform when it appears in the position where a subcommand
-	// would normally go (i.e. the first non-flag argument).
-	urlIdx := -1
-	for i := 0; i < len(args); i++ {
-		a := args[i]
+	// Scan all non-flag arguments for a GitHub URL. We skip anything
+	// starting with "-" (flags and their values) and try parseGitHubURL
+	// on each candidate. This avoids fragile heuristics about which
+	// flags are boolean vs value-bearing.
+	for i, a := range args {
 		if strings.HasPrefix(a, "-") {
-			// Skip flag value if it looks like --key=val already has the value.
-			if !strings.Contains(a, "=") {
-				// Peek: if next arg doesn't start with "-", treat it as the flag value.
-				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-					i++ // skip value
-				}
-			}
 			continue
 		}
-		urlIdx = i
-		break
+		subcommand, repo, number, ok := parseGitHubURL(a)
+		if !ok {
+			continue
+		}
+		newArgs := make([]string, 0, len(args)+3)
+		newArgs = append(newArgs, args[:i]...)
+		newArgs = append(newArgs, subcommand, strconv.Itoa(number), "--repo", repo)
+		newArgs = append(newArgs, args[i+1:]...)
+		return newArgs, true
 	}
-	if urlIdx < 0 {
-		return nil, false
-	}
-
-	subcommand, repo, number, ok := parseGitHubURL(args[urlIdx])
-	if !ok {
-		return nil, false
-	}
-
-	// Build transformed args: subcommand, number, --repo, owner/repo, then the rest.
-	newArgs := make([]string, 0, len(args)+3)
-	newArgs = append(newArgs, args[:urlIdx]...)           // flags before the URL
-	newArgs = append(newArgs, subcommand, strconv.Itoa(number), "--repo", repo)
-	newArgs = append(newArgs, args[urlIdx+1:]...)         // remaining flags
-	return newArgs, true
+	return nil, false
 }
 
 // parseGitHubURL extracts the subcommand ("pr" or "issue"), "owner/repo",

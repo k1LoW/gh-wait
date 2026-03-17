@@ -84,6 +84,12 @@ func TestTransformURLArgs(t *testing.T) {
 			false,
 		},
 		{
+			"Boolean flag before URL",
+			[]string{"--foreground", "https://github.com/owner/repo/pull/7", "--approved"},
+			[]string{"--foreground", "pr", "7", "--repo", "owner/repo", "--approved"},
+			true,
+		},
+		{
 			"Only flags",
 			[]string{"--foreground"},
 			nil,
