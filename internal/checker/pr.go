@@ -33,36 +33,36 @@ func (c *PRChecker) CheckState(ctx context.Context, r *rule.WatchRule, condition
 // checkCondition returns (matched, stateKey, error).
 // stateKey is empty for event-based conditions (commented) — they bypass transition tracking.
 // stateKey is non-empty for state-based conditions — used to detect transitions.
-func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (bool, string, error) {
+func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, error) {
 	switch cond {
 	case "approved":
-		matched, err := c.checkApproved(ctx, owner, repo, r)
+		matched, err := c.checkApproved(ctx, owner, repo, r, skipUserFilter)
 		return matched, "true", err
 	case "merged":
-		matched, err := c.checkMerged(ctx, owner, repo, r)
+		matched, err := c.checkMerged(ctx, owner, repo, r, skipUserFilter)
 		return matched, "true", err
 	case "closed":
-		matched, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number)
+		matched, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, skipUserFilter)
 		return matched, "true", err
 	case "ci-finished":
 		return c.checkCIFinished(ctx, owner, repo, r.Number)
 	case "ci-failed":
 		return c.checkCIFailed(ctx, owner, repo, r.Number)
 	case "commented":
-		matched, err := c.checkCommented(ctx, owner, repo, r)
+		matched, err := c.checkCommented(ctx, owner, repo, r, skipUserFilter)
 		return matched, "", err
 	}
 	return false, "", nil
 }
 
-func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *rule.WatchRule) (bool, error) {
+func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
 	reviews, _, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, nil)
 	if err != nil {
 		return false, skipNotFound(err)
 	}
 	for _, review := range reviews {
 		if review.GetState() == "APPROVED" {
-			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
+			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil
@@ -71,7 +71,7 @@ func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *ru
 	return false, nil
 }
 
-func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, r *rule.WatchRule) (bool, error) {
+func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
 	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, r.Number)
 	if err != nil {
 		return false, skipNotFound(err)
@@ -79,7 +79,7 @@ func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, r *rule
 	if !pr.GetMerged() {
 		return false, nil
 	}
-	if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), pr.GetMergedBy().GetLogin()) {
+	if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), pr.GetMergedBy().GetLogin()) {
 		return false, nil
 	}
 	return true, nil
@@ -169,7 +169,7 @@ func (c *PRChecker) checkCIFailed(ctx context.Context, owner, repo string, numbe
 	return false, sha, nil
 }
 
-func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *rule.WatchRule) (bool, error) {
+func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
 	since := r.SinceTime()
 	issueComments, _, err := c.client.Issues.ListComments(ctx, owner, repo, r.Number,
 		&github.IssueListCommentsOptions{Since: &since})
@@ -177,7 +177,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 		return false, skipNotFound(err)
 	}
 	for _, comment := range issueComments {
-		if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
+		if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 			continue
 		}
 		return true, nil
@@ -189,7 +189,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 		return false, skipNotFound(err)
 	}
 	for _, comment := range reviewComments {
-		if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
+		if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 			continue
 		}
 		return true, nil
@@ -201,7 +201,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	}
 	for _, review := range reviews {
 		if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
-			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
+			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil
