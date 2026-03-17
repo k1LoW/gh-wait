@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cli/go-gh/v2"
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/k1LoW/duration"
 	"github.com/k1LoW/gh-wait/internal/rule"
@@ -14,13 +16,23 @@ import (
 )
 
 var prCmd = &cobra.Command{
-	Use:   "pr <number>",
+	Use:   "pr [number]",
 	Short: "Watch a pull request for conditions",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		number, err := strconv.Atoi(args[0])
-		if err != nil {
-			return fmt.Errorf("invalid PR number: %w", err)
+		var number int
+		if len(args) > 0 {
+			n, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid PR number: %w", err)
+			}
+			number = n
+		} else {
+			n, err := detectCurrentPR()
+			if err != nil {
+				return fmt.Errorf("failed to detect PR for current branch (specify a PR number): %w", err)
+			}
+			number = n
 		}
 
 		repo, _ := cmd.Flags().GetString("repo")
@@ -92,6 +104,23 @@ var prCmd = &cobra.Command{
 		fmt.Printf("Watching PR #%d on %s for: %s (action: %s)\n", number, repo, strings.Join(conditions, ", "), actionFlag)
 		return nil
 	},
+}
+
+func detectCurrentPR() (int, error) {
+	stdout, _, err := gh.Exec("pr", "view", "--json", "number")
+	if err != nil {
+		return 0, fmt.Errorf("no PR found for current branch: %w", err)
+	}
+	var result struct {
+		Number int `json:"number"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		return 0, fmt.Errorf("failed to parse PR info: %w", err)
+	}
+	if result.Number == 0 {
+		return 0, fmt.Errorf("no PR found for current branch")
+	}
+	return result.Number, nil
 }
 
 func init() {
