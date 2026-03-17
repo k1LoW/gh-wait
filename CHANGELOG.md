@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.1](https://github.com/k1LoW/gh-wait/compare/v0.4.0...v0.4.1) - 2026-03-17
+### Fix bug 🐛
+- fix: until conditions stuck due to state-transition tracking by @k1LoW in https://github.com/k1LoW/gh-wait/pull/15
+
 ## [v0.4.0](https://github.com/k1LoW/gh-wait/compare/v0.3.2...v0.4.0) - 2026-03-17
 ### New Features 🎉
 - feat: auto-detect PR number from current branch by @k1LoW in https://github.com/k1LoW/gh-wait/pull/12
