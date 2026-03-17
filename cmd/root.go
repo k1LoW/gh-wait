@@ -128,13 +128,13 @@ func transformURLArgs(args []string) ([]string, bool) {
 		if strings.HasPrefix(a, "-") {
 			continue
 		}
-		subcommand, repo, number, ok := parseGitHubURL(a)
+		subcommand, repo, number, normalizedURL, ok := parseGitHubURL(a)
 		if !ok {
 			continue
 		}
-		newArgs := make([]string, 0, len(args)+3)
+		newArgs := make([]string, 0, len(args)+5)
 		newArgs = append(newArgs, args[:i]...)
-		newArgs = append(newArgs, subcommand, strconv.Itoa(number), "--repo", repo)
+		newArgs = append(newArgs, subcommand, strconv.Itoa(number), "--repo", repo, "--url", normalizedURL)
 		newArgs = append(newArgs, args[i+1:]...)
 		return newArgs, true
 	}
@@ -142,29 +142,29 @@ func transformURLArgs(args []string) ([]string, bool) {
 }
 
 // parseGitHubURL extracts the subcommand ("pr" or "issue"), "owner/repo",
-// and the number from a GitHub URL.  Returns ok=false if the URL is not a
-// recognized PR or issue URL.
-func parseGitHubURL(raw string) (subcommand, repo string, number int, ok bool) {
+// the number, and a normalized URL from a GitHub URL. Returns ok=false if
+// the URL is not a recognized PR or issue URL.
+func parseGitHubURL(raw string) (subcommand, repo string, number int, normalizedURL string, ok bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return "", "", 0, false
+		return "", "", 0, "", false
 	}
 
 	// Accept github.com and GitHub Enterprise hosts.
 	// Path format: /{owner}/{repo}/pull/{number} or /{owner}/{repo}/issues/{number}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) < 4 {
-		return "", "", 0, false
+		return "", "", 0, "", false
 	}
 
 	owner := parts[0]
 	repoName := parts[1]
-	kind := parts[2]  // "pull" or "issues"
+	kind := parts[2] // "pull" or "issues"
 	numStr := parts[3]
 
 	n, err := strconv.Atoi(numStr)
 	if err != nil || n <= 0 {
-		return "", "", 0, false
+		return "", "", 0, "", false
 	}
 
 	switch kind {
@@ -173,10 +173,11 @@ func parseGitHubURL(raw string) (subcommand, repo string, number int, ok bool) {
 	case "issues":
 		subcommand = "issue"
 	default:
-		return "", "", 0, false
+		return "", "", 0, "", false
 	}
 
-	return subcommand, owner + "/" + repoName, n, true
+	normalizedURL = fmt.Sprintf("%s://%s/%s/%s/%s/%d", u.Scheme, u.Host, owner, repoName, kind, n)
+	return subcommand, owner + "/" + repoName, n, normalizedURL, true
 }
 
 func init() {

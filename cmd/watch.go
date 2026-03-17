@@ -1,0 +1,140 @@
+package cmd
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/k1LoW/duration"
+	"github.com/k1LoW/gh-wait/internal/rule"
+	"github.com/spf13/cobra"
+)
+
+// registerWatchFlags registers the common flags shared by pr and issue subcommands.
+func registerWatchFlags(cmd *cobra.Command) {
+	cmd.Flags().String("repo", "", "Repository (owner/repo)")
+	cmd.Flags().String("url", "", "Override URL for the watch rule")
+	cmd.Flags().Bool("open", false, "Open in browser when condition is met")
+	cmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed, merged). Can be specified multiple times")
+	cmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
+	cmd.Flags().StringSlice("ignore-user", nil, "Regex pattern of users to ignore (can be specified multiple times)")
+	cmd.Flags().String("interval", rule.DefaultIntervalStr, "Polling interval (e.g., 30sec, 5min, 1h)")
+	// --url is set internally by transformURLArgs; hide it from help.
+	_ = cmd.Flags().MarkHidden("url")
+}
+
+// resolveRepo returns the repo from the --repo flag, falling back to the
+// current directory's git remote.
+func resolveRepo(cmd *cobra.Command) (string, error) {
+	repo, _ := cmd.Flags().GetString("repo")
+	if repo != "" {
+		return repo, nil
+	}
+	r, err := repository.Current()
+	if err != nil {
+		return "", fmt.Errorf("failed to detect repository (use --repo): %w", err)
+	}
+	return fmt.Sprintf("%s/%s", r.Owner, r.Name), nil
+}
+
+// parseWatchFlags reads and validates the common watch flags from the command.
+func parseWatchFlags(cmd *cobra.Command, conditionFlags []string) (conditions []string, until []string, count int, ignoreUsers []string, interval, action string, err error) {
+	for _, flag := range conditionFlags {
+		if v, _ := cmd.Flags().GetBool(flag); v {
+			conditions = append(conditions, flag)
+		}
+	}
+
+	until, _ = cmd.Flags().GetStringSlice("until")
+	count, _ = cmd.Flags().GetInt("count")
+
+	ignoreUsers, _ = cmd.Flags().GetStringSlice("ignore-user")
+	for _, pattern := range ignoreUsers {
+		if _, compileErr := regexp.Compile(pattern); compileErr != nil {
+			return nil, nil, 0, nil, "", "", fmt.Errorf("invalid --ignore-user pattern %q: %w", pattern, compileErr)
+		}
+	}
+
+	interval, _ = cmd.Flags().GetString("interval")
+	if _, parseErr := duration.Parse(interval); parseErr != nil {
+		return nil, nil, 0, nil, "", "", fmt.Errorf("invalid interval %q: %w", interval, parseErr)
+	}
+
+	action = "notify"
+	if v, _ := cmd.Flags().GetBool("open"); v {
+		action = "open"
+	}
+
+	return conditions, until, count, ignoreUsers, interval, action, nil
+}
+
+// buildWatchURL returns the URL for a watch rule. If --url is set (e.g. from
+// a GitHub URL argument), it is used as-is. Otherwise the URL is constructed
+// from the repo and number assuming github.com.
+func buildWatchURL(cmd *cobra.Command, ruleType, repo string, number int) string {
+	if u, _ := cmd.Flags().GetString("url"); u != "" {
+		return u
+	}
+	owner, repoName := rule.SplitRepo(repo)
+	pathSegment := "pull"
+	if ruleType == "issue" {
+		pathSegment = "issues"
+	}
+	return fmt.Sprintf("https://github.com/%s/%s/%s/%d", owner, repoName, pathSegment, number)
+}
+
+// addWatchRule builds a WatchRule, registers it with the server, and prints
+// a confirmation message.
+func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlags []string) error {
+	repo, err := resolveRepo(cmd)
+	if err != nil {
+		return err
+	}
+
+	conditions, until, count, ignoreUsers, interval, action, err := parseWatchFlags(cmd, conditionFlags)
+	if err != nil {
+		return err
+	}
+
+	if len(conditions) == 0 && len(until) == 0 {
+		return fmt.Errorf("at least one condition flag or --until is required (%s, --until)",
+			"--"+strings.Join(conditionFlags, ", --"))
+	}
+
+	url := buildWatchURL(cmd, ruleType, repo, number)
+
+	id := rule.GenerateID(ruleType, repo, number, conditions, until, count, ignoreUsers)
+	wr := &rule.WatchRule{
+		ID:          id,
+		Type:        ruleType,
+		Repo:        repo,
+		Number:      number,
+		Conditions:  conditions,
+		Action:      action,
+		URL:         url,
+		CreatedAt:   time.Now(),
+		Status:      "watching",
+		Until:       until,
+		MaxCount:    count,
+		IgnoreUsers: ignoreUsers,
+		Interval:    interval,
+	}
+
+	if err := ensureServer(); err != nil {
+		return err
+	}
+
+	c := newClient()
+	if err := c.AddRule(wr); err != nil {
+		return fmt.Errorf("failed to add rule: %w", err)
+	}
+
+	typeLabel := "PR"
+	if ruleType == "issue" {
+		typeLabel = "Issue"
+	}
+	fmt.Printf("Watching %s #%d on %s for: %s (action: %s)\n", typeLabel, number, repo, strings.Join(conditions, ", "), action)
+	return nil
+}
