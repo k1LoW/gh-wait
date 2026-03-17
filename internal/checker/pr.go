@@ -39,11 +39,11 @@ func (c *PRChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, cond
 func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (bool, error) {
 	switch cond {
 	case "approved":
-		return c.checkApproved(ctx, owner, repo, r.Number)
+		return c.checkApproved(ctx, owner, repo, r)
 	case "merged":
-		return c.checkMerged(ctx, owner, repo, r.Number)
+		return c.checkMerged(ctx, owner, repo, r)
 	case "closed":
-		return checkClosed(c.client, c.currentUser, ctx, owner, repo, r.Number)
+		return checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number)
 	case "ci-finished":
 		return c.checkCIFinished(ctx, owner, repo, r.Number)
 	case "ci-failed":
@@ -54,14 +54,14 @@ func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *r
 	return false, nil
 }
 
-func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, number int) (bool, error) {
-	reviews, _, err := c.client.PullRequests.ListReviews(ctx, owner, repo, number, nil)
+func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *rule.WatchRule) (bool, error) {
+	reviews, _, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, nil)
 	if err != nil {
 		return false, skipNotFound(err)
 	}
 	for _, review := range reviews {
 		if review.GetState() == "APPROVED" {
-			if isSelf(c.currentUser, review.GetUser().GetLogin()) {
+			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil
@@ -70,15 +70,15 @@ func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, numbe
 	return false, nil
 }
 
-func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, number int) (bool, error) {
-	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, number)
+func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, r *rule.WatchRule) (bool, error) {
+	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, r.Number)
 	if err != nil {
 		return false, skipNotFound(err)
 	}
 	if !pr.GetMerged() {
 		return false, nil
 	}
-	if isSelf(c.currentUser, pr.GetMergedBy().GetLogin()) {
+	if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), pr.GetMergedBy().GetLogin()) {
 		return false, nil
 	}
 	return true, nil
@@ -154,7 +154,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 		return false, skipNotFound(err)
 	}
 	for _, comment := range issueComments {
-		if isSelf(c.currentUser, comment.GetUser().GetLogin()) {
+		if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 			continue
 		}
 		return true, nil
@@ -166,7 +166,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 		return false, skipNotFound(err)
 	}
 	for _, comment := range reviewComments {
-		if isSelf(c.currentUser, comment.GetUser().GetLogin()) {
+		if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 			continue
 		}
 		return true, nil
@@ -178,7 +178,7 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	}
 	for _, review := range reviews {
 		if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
-			if isSelf(c.currentUser, review.GetUser().GetLogin()) {
+			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil

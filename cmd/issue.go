@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,12 @@ var issueCmd = &cobra.Command{
 		}
 		until, _ := cmd.Flags().GetStringSlice("until")
 		count, _ := cmd.Flags().GetInt("count")
+		ignoreUsers, _ := cmd.Flags().GetStringSlice("ignore-user")
+		for _, pattern := range ignoreUsers {
+			if _, err := regexp.Compile(pattern); err != nil {
+				return fmt.Errorf("invalid --ignore-user pattern %q: %w", pattern, err)
+			}
+		}
 		interval, _ := cmd.Flags().GetString("interval")
 		if _, err := duration.Parse(interval); err != nil {
 			return fmt.Errorf("invalid interval %q: %w", interval, err)
@@ -56,7 +63,7 @@ var issueCmd = &cobra.Command{
 		owner, repoName := rule.SplitRepo(repo)
 		url := fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repoName, number)
 
-		id := rule.GenerateID("issue", repo, number, conditions, until, count)
+		id := rule.GenerateID("issue", repo, number, conditions, until, count, ignoreUsers)
 		wr := &rule.WatchRule{
 			ID:         id,
 			Type:       "issue",
@@ -67,9 +74,10 @@ var issueCmd = &cobra.Command{
 			URL:        url,
 			CreatedAt:  time.Now(),
 			Status:     "watching",
-			Until:      until,
-			MaxCount:   count,
-			Interval:   interval,
+			Until:       until,
+			MaxCount:    count,
+			IgnoreUsers: ignoreUsers,
+			Interval:    interval,
 		}
 
 		if err := ensureServer(); err != nil {
@@ -94,5 +102,6 @@ func init() {
 	issueCmd.Flags().Bool("open", false, "Open in browser when condition is met")
 	issueCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed). Can be specified multiple times")
 	issueCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
+	issueCmd.Flags().StringSlice("ignore-user", nil, "Regex pattern of users to ignore (can be specified multiple times)")
 	issueCmd.Flags().String("interval", rule.DefaultIntervalStr, "Polling interval (e.g., 30sec, 5min, 1h)")
 }
