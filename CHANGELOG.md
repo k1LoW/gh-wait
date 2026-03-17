@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.3.1](https://github.com/k1LoW/gh-wait/compare/v0.3.0...v0.3.1) - 2026-03-17
+### Fix bug 🐛
+- fix: ci-finished not triggering for repos using only GitHub Actions by @k1LoW in https://github.com/k1LoW/gh-wait/pull/8
+
 ## [v0.3.0](https://github.com/k1LoW/gh-wait/compare/v0.2.0...v0.3.0) - 2026-03-17
 ### New Features 🎉
 - feat: add --ignore-user flag for regex-based user filtering by @k1LoW in https://github.com/k1LoW/gh-wait/pull/7
