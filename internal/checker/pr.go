@@ -98,18 +98,31 @@ func (c *PRChecker) checkCIFinished(ctx context.Context, owner, repo string, num
 	if err != nil {
 		return false, skipNotFound(err)
 	}
-	if combined.GetState() == "pending" {
+	// Only block on commit statuses if there are actual statuses.
+	// When no statuses exist, GetCombinedStatus returns "pending" by default.
+	if len(combined.Statuses) > 0 && combined.GetState() == "pending" {
 		return false, nil
 	}
 
-	checkRuns, _, err := c.client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, nil)
-	if err != nil {
-		return false, skipNotFound(err)
-	}
-	for _, cr := range checkRuns.CheckRuns {
-		if cr.GetStatus() != "completed" {
+	opts := &github.ListCheckRunsOptions{ListOptions: github.ListOptions{PerPage: 100}}
+	for {
+		checkRuns, resp, err := c.client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, opts)
+		if err != nil {
+			return false, skipNotFound(err)
+		}
+		for _, cr := range checkRuns.CheckRuns {
+			if cr.GetStatus() != "completed" {
+				return false, nil
+			}
+		}
+		// Require at least one status or check run to be present
+		if opts.Page == 0 && len(combined.Statuses) == 0 && checkRuns.GetTotal() == 0 {
 			return false, nil
 		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 	return true, nil
 }
@@ -134,14 +147,21 @@ func (c *PRChecker) checkCIFailed(ctx context.Context, owner, repo string, numbe
 		}
 	}
 
-	checkRuns, _, err := c.client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, nil)
-	if err != nil {
-		return false, skipNotFound(err)
-	}
-	for _, cr := range checkRuns.CheckRuns {
-		if cr.GetConclusion() == "failure" {
-			return true, nil
+	opts := &github.ListCheckRunsOptions{ListOptions: github.ListOptions{PerPage: 100}}
+	for {
+		checkRuns, resp, err := c.client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, opts)
+		if err != nil {
+			return false, skipNotFound(err)
 		}
+		for _, cr := range checkRuns.CheckRuns {
+			if cr.GetConclusion() == "failure" {
+				return true, nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 	return false, nil
 }
