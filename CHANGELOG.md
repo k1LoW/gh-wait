@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.3.2](https://github.com/k1LoW/gh-wait/compare/v0.3.1...v0.3.2) - 2026-03-17
+### Fix bug 🐛
+- feat: state-transition tracking for state-based conditions by @k1LoW in https://github.com/k1LoW/gh-wait/pull/10
+
 ## [v0.3.1](https://github.com/k1LoW/gh-wait/compare/v0.3.0...v0.3.1) - 2026-03-17
 ### Fix bug 🐛
 - fix: ci-finished not triggering for repos using only GitHub Actions by @k1LoW in https://github.com/k1LoW/gh-wait/pull/8
