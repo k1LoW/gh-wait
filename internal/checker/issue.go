@@ -23,35 +23,36 @@ func (c *IssueChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, erro
 func (c *IssueChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
 	owner, repo := rule.SplitRepo(r.Repo)
 	for _, cond := range conditions {
-		matched, err := c.checkCondition(ctx, owner, repo, r, cond)
+		matched, stateKey, err := c.checkCondition(ctx, owner, repo, r, cond)
 		if err != nil {
 			return false, err
 		}
-		if matched {
+		if checkWithTransition(r, cond, matched, stateKey) {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (bool, error) {
+func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (bool, string, error) {
 	switch cond {
 	case "commented":
 		since := r.SinceTime()
 		comments, _, err := c.client.Issues.ListComments(ctx, owner, repo, r.Number,
 			&github.IssueListCommentsOptions{Since: &since})
 		if err != nil {
-			return false, skipNotFound(err)
+			return false, "", skipNotFound(err)
 		}
 		for _, comment := range comments {
 			if shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 				continue
 			}
-			return true, nil
+			return true, "", nil
 		}
-		return false, nil
+		return false, "", nil
 	case "closed":
-		return checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number)
+		matched, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number)
+		return matched, "true", err
 	}
-	return false, nil
+	return false, "", nil
 }
