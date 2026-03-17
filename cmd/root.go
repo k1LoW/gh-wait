@@ -127,7 +127,7 @@ func transformURLArgs(args []string) ([]string, bool) {
 	// Find the first positional arg (skip flags and their values).
 	// We only transform when it appears in the position where a subcommand
 	// would normally go (i.e. the first non-flag argument).
-	var urlIdx int = -1
+	urlIdx := -1
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if strings.HasPrefix(a, "-") {
@@ -162,7 +162,7 @@ func transformURLArgs(args []string) ([]string, bool) {
 
 // parseGitHubURL extracts the subcommand ("pr" or "issue"), "owner/repo",
 // and the number from a GitHub URL.  Returns ok=false if the URL is not a
-// recognised PR or issue URL.
+// recognized PR or issue URL.
 func parseGitHubURL(raw string) (subcommand, repo string, number int, ok bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
