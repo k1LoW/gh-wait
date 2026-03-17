@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.2](https://github.com/k1LoW/gh-wait/compare/v0.4.1...v0.4.2) - 2026-03-17
+### Fix bug 🐛
+- fix: skip user filtering for until (termination) conditions by @k1LoW in https://github.com/k1LoW/gh-wait/pull/18
+
 ## [v0.4.1](https://github.com/k1LoW/gh-wait/compare/v0.4.0...v0.4.1) - 2026-03-17
 ### Fix bug 🐛
 - fix: until conditions stuck due to state-transition tracking by @k1LoW in https://github.com/k1LoW/gh-wait/pull/15
