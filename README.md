@@ -7,7 +7,10 @@ It runs a lightweight background server that polls the GitHub API and can open y
 ## Usage
 
 ```bash
-# Watch for PR approval, then open in browser
+# Watch for PR approval, then open in browser (auto-detect PR from current branch)
+$ gh wait pr --approved --open
+
+# Watch for PR approval with explicit number
 $ gh wait pr 123 --approved --open
 
 # Watch for CI completion
@@ -103,7 +106,10 @@ $ gh extension install k1LoW/gh-wait
 
 ## Command Line Options
 
-### `gh wait pr <number>`
+### `gh wait pr [number]`
+
+If `number` is omitted, the PR associated with the current branch is automatically detected via `gh pr view`.
+
 
 | Option | Description |
 |--------|-------------|
