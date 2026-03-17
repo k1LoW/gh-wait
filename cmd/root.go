@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/k1LoW/gh-wait/internal/client"
@@ -33,6 +35,12 @@ for specific conditions (approvals, merges, CI completion, comments, etc.)
 and triggers actions (desktop notification, open in browser) when those
 conditions are met.
 
+You can pass a GitHub PR or issue URL directly instead of using
+subcommands — gh-wait will auto-detect the type:
+
+  gh wait https://github.com/owner/repo/pull/42 --approved --open
+  gh wait https://github.com/owner/repo/issues/5 --commented
+
 It uses a client-server architecture: a background server polls the GitHub
 API at configurable intervals and evaluates watch rules. The server is
 automatically started when you create the first watch rule.
@@ -43,7 +51,13 @@ conditions so the rule automatically stops watching.
 
 Watch rules and server state are persisted to disk, so rules survive
 server restarts.`,
-	Example: `  # Watch the current branch's PR for approval, open browser when approved
+	Example: `  # Watch a PR by URL
+  gh wait https://github.com/owner/repo/pull/42 --approved --open
+
+  # Watch an issue by URL
+  gh wait https://github.com/owner/repo/issues/5 --commented
+
+  # Watch the current branch's PR for approval, open browser when approved
   gh wait pr --approved --open
 
   # Watch PR #42 for merge or close
@@ -87,10 +101,83 @@ server restarts.`,
 }
 
 func Execute() {
+	if transformed, ok := transformURLArgs(os.Args[1:]); ok {
+		rootCmd.SetArgs(transformed)
+	}
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+// transformURLArgs detects a GitHub PR/issue URL in the arguments and
+// rewrites them into the equivalent subcommand form so that Cobra routes
+// to the correct handler.
+//
+//	gh-wait https://github.com/owner/repo/pull/42 --approved
+//	  → pr 42 --repo owner/repo --approved
+//
+//	gh-wait https://github.com/owner/repo/issues/5 --commented
+//	  → issue 5 --repo owner/repo --commented
+func transformURLArgs(args []string) ([]string, bool) {
+	// Scan all non-flag arguments for a GitHub URL. We skip anything
+	// starting with "-" (flags and their values) and try parseGitHubURL
+	// on each candidate. This avoids fragile heuristics about which
+	// flags are boolean vs value-bearing.
+	for i, a := range args {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		subcommand, repo, number, normalizedURL, ok := parseGitHubURL(a)
+		if !ok {
+			continue
+		}
+		newArgs := make([]string, 0, len(args)+5)
+		newArgs = append(newArgs, args[:i]...)
+		newArgs = append(newArgs, subcommand, strconv.Itoa(number), "--repo", repo, "--url", normalizedURL)
+		newArgs = append(newArgs, args[i+1:]...)
+		return newArgs, true
+	}
+	return nil, false
+}
+
+// parseGitHubURL extracts the subcommand ("pr" or "issue"), "owner/repo",
+// the number, and a normalized URL from a GitHub URL. Returns ok=false if
+// the URL is not a recognized PR or issue URL.
+func parseGitHubURL(raw string) (subcommand, repo string, number int, normalizedURL string, ok bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", "", 0, "", false
+	}
+
+	// Accept github.com and GitHub Enterprise hosts.
+	// Path format: /{owner}/{repo}/pull/{number} or /{owner}/{repo}/issues/{number}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 4 {
+		return "", "", 0, "", false
+	}
+
+	owner := parts[0]
+	repoName := parts[1]
+	kind := parts[2] // "pull" or "issues"
+	numStr := parts[3]
+
+	n, err := strconv.Atoi(numStr)
+	if err != nil || n <= 0 {
+		return "", "", 0, "", false
+	}
+
+	switch kind {
+	case "pull":
+		subcommand = "pr"
+	case "issues":
+		subcommand = "issue"
+	default:
+		return "", "", 0, "", false
+	}
+
+	normalizedURL = fmt.Sprintf("%s://%s/%s/%s/%s/%d", u.Scheme, u.Host, owner, repoName, kind, n)
+	return subcommand, owner + "/" + repoName, n, normalizedURL, true
 }
 
 func init() {

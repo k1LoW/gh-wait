@@ -6,6 +6,18 @@ It runs a lightweight background server that polls the GitHub API and can open y
 
 ## Usage
 
+You can pass a GitHub URL directly — `gh-wait` auto-detects whether it is a PR or an issue:
+
+```bash
+# Watch a PR by URL
+$ gh wait https://github.com/owner/repo/pull/123 --approved --open
+
+# Watch an issue by URL
+$ gh wait https://github.com/owner/repo/issues/456 --commented --open
+```
+
+Or use the explicit subcommands:
+
 ```bash
 # Watch for PR approval, then open in browser (auto-detect PR from current branch)
 $ gh wait pr --approved --open

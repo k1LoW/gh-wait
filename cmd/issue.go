@@ -2,16 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
-	"strings"
-	"time"
 
-	"github.com/cli/go-gh/v2/pkg/repository"
-	"github.com/k1LoW/duration"
-	"github.com/k1LoW/gh-wait/internal/rule"
 	"github.com/spf13/cobra"
 )
+
+var issueConditionFlags = []string{"commented", "closed"}
 
 var issueCmd = &cobra.Command{
 	Use:   "issue <number>",
@@ -66,85 +62,13 @@ Filtering:
 			return fmt.Errorf("invalid issue number: %w", err)
 		}
 
-		repo, _ := cmd.Flags().GetString("repo")
-		if repo == "" {
-			r, err := repository.Current()
-			if err != nil {
-				return fmt.Errorf("failed to detect repository (use --repo): %w", err)
-			}
-			repo = fmt.Sprintf("%s/%s", r.Owner, r.Name)
-		}
-
-		var conditions []string
-		for _, flag := range []string{"commented", "closed"} {
-			if v, _ := cmd.Flags().GetBool(flag); v {
-				conditions = append(conditions, flag)
-			}
-		}
-		until, _ := cmd.Flags().GetStringSlice("until")
-		count, _ := cmd.Flags().GetInt("count")
-		ignoreUsers, _ := cmd.Flags().GetStringSlice("ignore-user")
-		for _, pattern := range ignoreUsers {
-			if _, err := regexp.Compile(pattern); err != nil {
-				return fmt.Errorf("invalid --ignore-user pattern %q: %w", pattern, err)
-			}
-		}
-		interval, _ := cmd.Flags().GetString("interval")
-		if _, err := duration.Parse(interval); err != nil {
-			return fmt.Errorf("invalid interval %q: %w", interval, err)
-		}
-
-		if len(conditions) == 0 && len(until) == 0 {
-			return fmt.Errorf("at least one condition flag or --until is required (--commented, --closed, --until)")
-		}
-
-		actionFlag := "notify"
-		if v, _ := cmd.Flags().GetBool("open"); v {
-			actionFlag = "open"
-		}
-
-		owner, repoName := rule.SplitRepo(repo)
-		url := fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repoName, number)
-
-		id := rule.GenerateID("issue", repo, number, conditions, until, count, ignoreUsers)
-		wr := &rule.WatchRule{
-			ID:         id,
-			Type:       "issue",
-			Repo:       repo,
-			Number:     number,
-			Conditions: conditions,
-			Action:     actionFlag,
-			URL:        url,
-			CreatedAt:  time.Now(),
-			Status:     "watching",
-			Until:       until,
-			MaxCount:    count,
-			IgnoreUsers: ignoreUsers,
-			Interval:    interval,
-		}
-
-		if err := ensureServer(); err != nil {
-			return err
-		}
-
-		c := newClient()
-		if err := c.AddRule(wr); err != nil {
-			return fmt.Errorf("failed to add rule: %w", err)
-		}
-
-		fmt.Printf("Watching Issue #%d on %s for: %s (action: %s)\n", number, repo, strings.Join(conditions, ", "), actionFlag)
-		return nil
+		return addWatchRule(cmd, "issue", number, issueConditionFlags)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(issueCmd)
-	issueCmd.Flags().String("repo", "", "Repository (owner/repo)")
+	registerWatchFlags(issueCmd)
 	issueCmd.Flags().Bool("commented", false, "Watch for new comments")
 	issueCmd.Flags().Bool("closed", false, "Watch for close")
-	issueCmd.Flags().Bool("open", false, "Open in browser when condition is met")
-	issueCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed). Can be specified multiple times")
-	issueCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
-	issueCmd.Flags().StringSlice("ignore-user", nil, "Regex pattern of users to ignore (can be specified multiple times)")
-	issueCmd.Flags().String("interval", rule.DefaultIntervalStr, "Polling interval (e.g., 30sec, 5min, 1h)")
 }

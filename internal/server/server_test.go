@@ -536,12 +536,17 @@ func TestBackupLoop(t *testing.T) {
 	s.AddRule(&rule.WatchRule{ID: "abc", Type: "pr", Status: "watching"})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go s.backupLoop(ctx)
+	done := make(chan struct{})
+	go func() {
+		s.backupLoop(ctx)
+		close(done)
+	}()
 
 	// Trigger backup
 	s.notifyBackup()
 	time.Sleep(2 * time.Second)
 	cancel()
+	<-done // Wait for backupLoop to finish its final Save before TempDir cleanup
 
 	// Verify file was written
 	s2 := NewState(29999)
