@@ -21,7 +21,7 @@ type WatchRule struct {
 	Until         []string  `json:"until,omitempty"`         // termination conditions (any match ends the rule)
 	MaxCount      int       `json:"max_count,omitempty"`     // 0=unlimited, N=end after N triggers
 	TriggerCount  int       `json:"trigger_count"`           // current trigger count
-	LastCheckedAt time.Time `json:"last_checked_at,omitempty"`
+	LastCheckedAt time.Time `json:"last_checked_at,omitzero"`
 }
 
 func GenerateID(typ, repo string, number int, conditions, until []string, maxCount int) string {
