@@ -114,7 +114,7 @@ func detectCurrentPR() (int, error) {
 	var result struct {
 		Number int `json:"number"`
 	}
-	if err := json.NewDecoder(&stdout).Decode(&result); err != nil {
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		return 0, fmt.Errorf("failed to parse PR info: %w", err)
 	}
 	if result.Number == 0 {
