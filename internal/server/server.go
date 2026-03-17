@@ -89,6 +89,18 @@ func (s *State) UpdateRule(r *rule.WatchRule) {
 	}
 }
 
+// updateLastCheckedAt updates only LastCheckedAt without triggering a backup.
+func (s *State) updateLastCheckedAt(r *rule.WatchRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, existing := range s.rules {
+		if existing.ID == r.ID {
+			s.rules[i].LastCheckedAt = r.LastCheckedAt
+			return
+		}
+	}
+}
+
 func (s *State) WatchingRules() []*rule.WatchRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -424,6 +436,11 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			continue
 		}
 
+		// Update LastCheckedAt unconditionally for interval scheduling.
+		// Use updateLastCheckedAt to avoid triggering backup on every tick.
+		r.LastCheckedAt = now
+		state.updateLastCheckedAt(r)
+
 		// Step 1: Check until (termination) conditions
 		if len(r.Until) > 0 {
 			untilMatched, err := c.CheckConditions(ctx, r, r.Until)
@@ -451,8 +468,6 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		matched, err := c.Check(ctx, r)
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
-			r.LastCheckedAt = now
-			state.UpdateRule(r)
 			continue
 		}
 		if matched {
@@ -460,7 +475,6 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			executeAction(act, r)
 
 			r.TriggerCount++
-			r.LastCheckedAt = now
 			state.UpdateRule(r)
 
 			// Step 3: Determine if rule should be removed
@@ -468,9 +482,6 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 				state.MarkTriggered(r.ID)
 				state.RemoveRule(r.ID)
 			}
-		} else {
-			r.LastCheckedAt = now
-			state.UpdateRule(r)
 		}
 	}
 }

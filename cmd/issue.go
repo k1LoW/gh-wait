@@ -94,5 +94,5 @@ func init() {
 	issueCmd.Flags().Bool("open", false, "Open in browser when condition is met")
 	issueCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed). Can be specified multiple times")
 	issueCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
-	issueCmd.Flags().String("interval", "30sec", "Polling interval (e.g., 30sec, 5min, 1h)")
+	issueCmd.Flags().String("interval", rule.DefaultIntervalStr, "Polling interval (e.g., 30sec, 5min, 1h)")
 }

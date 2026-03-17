@@ -98,5 +98,5 @@ func init() {
 	prCmd.Flags().Bool("open", false, "Open in browser when condition is met")
 	prCmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed, merged). Can be specified multiple times")
 	prCmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
-	prCmd.Flags().String("interval", "30sec", "Polling interval (e.g., 30sec, 5min, 1h)")
+	prCmd.Flags().String("interval", rule.DefaultIntervalStr, "Polling interval (e.g., 30sec, 5min, 1h)")
 }

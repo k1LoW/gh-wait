@@ -7,6 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/k1LoW/gh-wait/internal/rule"
 	"github.com/spf13/cobra"
 )
 
@@ -44,7 +45,7 @@ var listCmd = &cobra.Command{
 			}
 			intervalStr := r.Interval
 			if intervalStr == "" {
-				intervalStr = "30sec"
+				intervalStr = rule.DefaultIntervalStr
 			}
 			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				r.ID, r.Type, r.Repo, r.Number,
