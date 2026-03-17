@@ -34,6 +34,30 @@ func shouldIgnoreUser(currentUser string, compiled []*regexp.Regexp, login strin
 	return false
 }
 
+// checkConditionFunc is the signature of a per-checker condition evaluator.
+type checkConditionFunc func(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string) (matched bool, stateKey string, err error)
+
+// evalConditions iterates conditions, calling checkFn for each.
+// When trackTransition is true, state-transition tracking is applied so that
+// state-based conditions only fire once per transition. When false, the raw
+// match result is used (suitable for until/termination checks).
+func evalConditions(ctx context.Context, r *rule.WatchRule, conditions []string, checkFn checkConditionFunc, trackTransition bool) (bool, error) {
+	owner, repo := rule.SplitRepo(r.Repo)
+	for _, cond := range conditions {
+		matched, stateKey, err := checkFn(ctx, owner, repo, r, cond)
+		if err != nil {
+			return false, err
+		}
+		if trackTransition {
+			matched = checkWithTransition(r, cond, matched, stateKey)
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // checkWithTransition applies state-transition tracking to a condition check result.
 // State-based conditions (non-empty stateKey) only trigger once per state transition.
 // Event-based conditions (empty stateKey) always pass through.
