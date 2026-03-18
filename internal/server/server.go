@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -91,15 +92,32 @@ func (s *State) UpdateRule(r *rule.WatchRule) {
 	}
 }
 
-// syncCheckState syncs lightweight mutable fields (LastCheckedAt, FiredStates)
-// from a cloned rule back to the original without triggering a backup.
-func (s *State) syncCheckState(r *rule.WatchRule) {
+// updateLastCheckedAt updates only LastCheckedAt without triggering a backup.
+func (s *State) updateLastCheckedAt(r *rule.WatchRule) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, existing := range s.rules {
 		if existing.ID == r.ID {
 			s.rules[i].LastCheckedAt = r.LastCheckedAt
-			s.rules[i].FiredStates = r.FiredStates
+			return
+		}
+	}
+}
+
+// syncFiredStates deep-copies FiredStates from a cloned rule back to the
+// original without triggering a backup.
+func (s *State) syncFiredStates(r *rule.WatchRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, existing := range s.rules {
+		if existing.ID == r.ID {
+			if r.FiredStates != nil {
+				cp := make(map[string]string, len(r.FiredStates))
+				maps.Copy(cp, r.FiredStates)
+				s.rules[i].FiredStates = cp
+			} else {
+				s.rules[i].FiredStates = nil
+			}
 			return
 		}
 	}
@@ -453,9 +471,9 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		isFirstCheck := r.LastCheckedAt.IsZero()
 
 		// Update LastCheckedAt unconditionally for interval scheduling.
-		// Use syncCheckState to avoid triggering backup on every tick.
+		// Use updateLastCheckedAt to avoid triggering backup on every tick.
 		r.LastCheckedAt = now
-		state.syncCheckState(r)
+		state.updateLastCheckedAt(r)
 
 		// On the first check, enable seeding mode so that
 		// checkWithTransition records state-based conditions without
@@ -474,7 +492,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 				slog.Error("until check failed", "rule_id", r.ID, "error", err)
 				if isFirstCheck {
 					r.LastCheckedAt = time.Time{}
-					state.syncCheckState(r)
+					state.updateLastCheckedAt(r)
 				}
 				r.Seeding = false
 				continue
@@ -502,13 +520,13 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 
 		matched, err := c.Check(ctx, r)
 		r.Seeding = false
-		// Sync FiredStates back after checker may have mutated them.
-		state.syncCheckState(r)
+		// Sync FiredStates back (deep copy) after checker may have mutated them.
+		state.syncFiredStates(r)
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
 			if isFirstCheck {
 				r.LastCheckedAt = time.Time{}
-				state.syncCheckState(r)
+				state.updateLastCheckedAt(r)
 			}
 			continue
 		}
