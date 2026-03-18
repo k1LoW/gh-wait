@@ -91,13 +91,15 @@ func (s *State) UpdateRule(r *rule.WatchRule) {
 	}
 }
 
-// updateLastCheckedAt updates only LastCheckedAt without triggering a backup.
-func (s *State) updateLastCheckedAt(r *rule.WatchRule) {
+// syncCheckState syncs lightweight mutable fields (LastCheckedAt, FiredStates)
+// from a cloned rule back to the original without triggering a backup.
+func (s *State) syncCheckState(r *rule.WatchRule) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, existing := range s.rules {
 		if existing.ID == r.ID {
 			s.rules[i].LastCheckedAt = r.LastCheckedAt
+			s.rules[i].FiredStates = r.FiredStates
 			return
 		}
 	}
@@ -109,7 +111,7 @@ func (s *State) WatchingRules() []*rule.WatchRule {
 	var result []*rule.WatchRule
 	for _, r := range s.rules {
 		if r.Status == "watching" {
-			result = append(result, r)
+			result = append(result, r.Clone())
 		}
 	}
 	return result
@@ -453,7 +455,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		// Update LastCheckedAt unconditionally for interval scheduling.
 		// Use updateLastCheckedAt to avoid triggering backup on every tick.
 		r.LastCheckedAt = now
-		state.updateLastCheckedAt(r)
+		state.syncCheckState(r)
 
 		// On the first check, enable seeding mode so that
 		// checkWithTransition records state-based conditions without
@@ -472,7 +474,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 				slog.Error("until check failed", "rule_id", r.ID, "error", err)
 				if isFirstCheck {
 					r.LastCheckedAt = time.Time{}
-					state.updateLastCheckedAt(r)
+					state.syncCheckState(r)
 				}
 				r.Seeding = false
 				continue
@@ -500,11 +502,13 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 
 		matched, err := c.Check(ctx, r)
 		r.Seeding = false
+		// Sync FiredStates back after checker may have mutated them.
+		state.syncCheckState(r)
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
 			if isFirstCheck {
 				r.LastCheckedAt = time.Time{}
-				state.updateLastCheckedAt(r)
+				state.syncCheckState(r)
 			}
 			continue
 		}

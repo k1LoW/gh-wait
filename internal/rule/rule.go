@@ -53,7 +53,7 @@ func (r *WatchRule) CompiledIgnoreUsers() []*regexp.Regexp {
 	return r.compiledIgnoreUsers
 }
 
-// Clone returns a deep copy of the rule, safe for concurrent read access.
+// Clone returns a deep copy of the rule.
 // The sync.Once for compiled ignore-user regexps is intentionally not copied.
 func (r *WatchRule) Clone() *WatchRule {
 	cp := &WatchRule{
