@@ -88,10 +88,10 @@ func (r *WatchRule) Clone() *WatchRule {
 		cp.FiredStates = make(map[string]string, len(r.FiredStates))
 		maps.Copy(cp.FiredStates, r.FiredStates)
 	}
-	// Share compiled regexps (read-only) to avoid recompilation on every tick.
-	compiled := r.CompiledIgnoreUsers()
-	if compiled != nil {
-		cp.compiledIgnoreUsers = compiled
+	// Share compiled regexps (read-only) if already populated.
+	// Avoid calling CompiledIgnoreUsers() here as it mutates the source rule.
+	if r.compiledIgnoreUsers != nil {
+		cp.compiledIgnoreUsers = r.compiledIgnoreUsers
 		cp.ignoreUsersOnce.Do(func() {})
 	}
 	return cp
