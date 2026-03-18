@@ -85,8 +85,8 @@ $ gh wait restart
 ### List Output
 
 ```
-ID        TYPE  REPO           NUMBER  CONDITIONS  UNTIL   COUNT  INTERVAL  ACTION  STATUS
-00a12cf6  pr    k1LoW/gh-wait  1       commented   closed  0/0    30sec     open    watching
+ID        URL                                        CONDITIONS  UNTIL   COUNT  INTERVAL  ACTION  STATUS    LAST_CHECKED_AT
+00a12cf6  https://github.com/k1LoW/gh-wait/pull/1    commented   closed  0/0    30sec     open    watching  a few seconds ago
 abc12345  pr    k1LoW/gh-wait  2       approved    merged  1/3    5min      open    watching
 ```
 
