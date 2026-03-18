@@ -25,7 +25,8 @@ type WatchRule struct {
 	Until         []string  `json:"until,omitempty"`         // termination conditions (any match ends the rule)
 	MaxCount      int       `json:"max_count,omitempty"`     // 0=unlimited, N=end after N triggers
 	TriggerCount  int       `json:"trigger_count"`           // current trigger count
-	LastCheckedAt time.Time `json:"last_checked_at,omitzero"`
+	LastCheckedAt   time.Time `json:"last_checked_at,omitzero"`
+	LastTriggeredAt time.Time `json:"last_triggered_at,omitzero"`
 	Interval      string            `json:"interval,omitempty"`      // polling interval (e.g., "30sec", "5min", "1h")
 	IgnoreUsers   []string          `json:"ignore_users,omitempty"`  // regex patterns of users to ignore
 	FiredStates   map[string]string `json:"fired_states,omitempty"`  // state-based condition dedup (condition -> stateKey)

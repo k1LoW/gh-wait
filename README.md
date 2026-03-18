@@ -85,9 +85,9 @@ $ gh wait restart
 ### List Output
 
 ```
-ID        URL                                        CONDITIONS  UNTIL   COUNT  INTERVAL  ACTION  STATUS    LAST_CHECKED_AT
-00a12cf6  https://github.com/k1LoW/gh-wait/pull/1    commented   closed  0/0    30sec     open    watching  a few seconds ago
-abc12345  pr    k1LoW/gh-wait  2       approved    merged  1/3    5min      open    watching
+ID        URL                                        CONDITIONS  UNTIL   COUNT  INTERVAL  ACTION  STATUS    LAST_TRIGGERED_AT
+00a12cf6  https://github.com/k1LoW/gh-wait/pull/1    commented   closed  0/3    30sec     open    watching  -
+abc12345  https://github.com/k1LoW/gh-wait/pull/2    approved    merged  1/3    5min      open    watching  3 minutes ago
 ```
 
 ## Supported Conditions
