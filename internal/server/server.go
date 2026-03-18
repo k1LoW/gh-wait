@@ -453,7 +453,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		isFirstCheck := r.LastCheckedAt.IsZero()
 
 		// Update LastCheckedAt unconditionally for interval scheduling.
-		// Use updateLastCheckedAt to avoid triggering backup on every tick.
+		// Use syncCheckState to avoid triggering backup on every tick.
 		r.LastCheckedAt = now
 		state.syncCheckState(r)
 

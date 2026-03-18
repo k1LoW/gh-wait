@@ -54,7 +54,7 @@ func (r *WatchRule) CompiledIgnoreUsers() []*regexp.Regexp {
 }
 
 // Clone returns a deep copy of the rule.
-// The sync.Once for compiled ignore-user regexps is intentionally not copied.
+// Compiled ignore-user regexps are shared (read-only) to avoid recompilation.
 func (r *WatchRule) Clone() *WatchRule {
 	cp := &WatchRule{
 		ID:              r.ID,
@@ -87,6 +87,12 @@ func (r *WatchRule) Clone() *WatchRule {
 	if r.FiredStates != nil {
 		cp.FiredStates = make(map[string]string, len(r.FiredStates))
 		maps.Copy(cp.FiredStates, r.FiredStates)
+	}
+	// Share compiled regexps (read-only) to avoid recompilation on every tick.
+	compiled := r.CompiledIgnoreUsers()
+	if compiled != nil {
+		cp.compiledIgnoreUsers = compiled
+		cp.ignoreUsersOnce.Do(func() {})
 	}
 	return cp
 }
