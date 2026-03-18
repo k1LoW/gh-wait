@@ -445,10 +445,21 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			continue
 		}
 
+		// Detect first check before updating LastCheckedAt.
+		isFirstCheck := r.LastCheckedAt.IsZero()
+
 		// Update LastCheckedAt unconditionally for interval scheduling.
 		// Use updateLastCheckedAt to avoid triggering backup on every tick.
 		r.LastCheckedAt = now
 		state.updateLastCheckedAt(r)
+
+		// On the first check, enable seeding mode so that
+		// checkWithTransition records state-based conditions without
+		// triggering actions, while event-based conditions (e.g.,
+		// commented) still fire normally.
+		if isFirstCheck {
+			r.Seeding = true
+		}
 
 		// Step 1: Check until (termination) conditions.
 		// Use CheckState (no transition tracking) because until conditions
@@ -457,28 +468,42 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			untilMatched, err := c.CheckState(ctx, r, r.Until)
 			if err != nil {
 				slog.Error("until check failed", "rule_id", r.ID, "error", err)
+				if isFirstCheck {
+					r.LastCheckedAt = time.Time{}
+					state.updateLastCheckedAt(r)
+				}
+				r.Seeding = false
 				continue
 			}
 			if untilMatched {
-				slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-				if len(r.Conditions) == 0 {
-					// Until-only mode: execute action when until condition is met
-					executeAction(act, r)
+				if !isFirstCheck {
+					slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+					if len(r.Conditions) == 0 {
+						// Until-only mode: execute action when until condition is met
+						executeAction(act, r)
+					}
+					state.MarkTriggered(r.ID)
+					state.RemoveRule(r.ID)
+					continue
 				}
-				state.MarkTriggered(r.ID)
-				state.RemoveRule(r.ID)
-				continue
+				slog.Info("first check: seeding until state", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
 			}
 		}
 
 		// Step 2: Check trigger conditions
 		if len(r.Conditions) == 0 {
+			r.Seeding = false
 			continue
 		}
 
 		matched, err := c.Check(ctx, r)
+		r.Seeding = false
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
+			if isFirstCheck {
+				r.LastCheckedAt = time.Time{}
+				state.updateLastCheckedAt(r)
+			}
 			continue
 		}
 		if matched {

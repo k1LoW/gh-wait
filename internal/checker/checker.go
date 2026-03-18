@@ -73,15 +73,16 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 	if stateKey == "" {
 		return true
 	}
-	// One-shot rules are removed after first trigger, no dedup needed
-	if r.IsOneShot() {
-		return true
-	}
 	// State-based: only trigger on transition (new stateKey)
 	if r.HasFiredForState(cond, stateKey) {
 		return false
 	}
 	r.RecordFiredState(cond, stateKey)
+	// When seeding (first check), record state but don't trigger.
+	// This prevents pre-existing states from causing false triggers.
+	if r.Seeding {
+		return false
+	}
 	return true
 }
 
