@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -377,6 +378,43 @@ func TestCheckRulesFirstCheckSetsSeeding(t *testing.T) {
 	CheckRules(context.Background(), s, checkers, ma)
 	if seedingDuringCheck {
 		t.Error("expected Seeding=false on second check")
+	}
+}
+
+func TestCheckRulesFirstCheckErrorRetriesSeeding(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions: []string{"approved"},
+		Interval:   "0s",
+	})
+
+	// First check errors → LastCheckedAt should be reverted to zero
+	mc := &mockChecker{result: false, err: fmt.Errorf("api error")}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, ma)
+
+	rules := s.Rules()
+	if len(rules) != 1 {
+		t.Fatal("expected rule to remain")
+	}
+	if !rules[0].LastCheckedAt.IsZero() {
+		t.Error("expected LastCheckedAt to be reverted to zero after first check error")
+	}
+
+	// Second check succeeds with Seeding (because LastCheckedAt is still zero)
+	var seedingDuringCheck bool
+	mc2 := &seedingCaptureMockChecker{
+		result:          false,
+		capturedSeeding: &seedingDuringCheck,
+	}
+	checkers["pr"] = mc2
+	CheckRules(context.Background(), s, checkers, ma)
+
+	if !seedingDuringCheck {
+		t.Error("expected Seeding=true on retry after previous error")
 	}
 }
 

@@ -468,6 +468,10 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			untilMatched, err := c.CheckState(ctx, r, r.Until)
 			if err != nil {
 				slog.Error("until check failed", "rule_id", r.ID, "error", err)
+				if isFirstCheck {
+					r.LastCheckedAt = time.Time{}
+					state.updateLastCheckedAt(r)
+				}
 				r.Seeding = false
 				continue
 			}
@@ -496,6 +500,10 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		r.Seeding = false
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
+			if isFirstCheck {
+				r.LastCheckedAt = time.Time{}
+				state.updateLastCheckedAt(r)
+			}
 			continue
 		}
 		if matched {
