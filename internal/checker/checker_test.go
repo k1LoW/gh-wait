@@ -72,22 +72,49 @@ func TestCheckWithTransitionEventBased(t *testing.T) {
 	}
 }
 
-func TestCheckWithTransitionFirstCheckSeedingPreventsSubsequentFire(t *testing.T) {
-	// Simulates the first-check seeding scenario:
-	// checkWithTransition records state on first check, then CheckRules
-	// skips the action (isFirstCheck). On the second check, the same
-	// state should be deduped and not trigger.
-	r := &rule.WatchRule{ID: "r1"}
+func TestCheckWithTransitionSeeding(t *testing.T) {
+	t.Run("state-based: seeding records state but returns false", func(t *testing.T) {
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
 
-	// First check: condition matches, state recorded (action skipped by CheckRules)
-	got := checkWithTransition(r, "approved", true, "true")
-	if !got {
-		t.Error("expected true from checkWithTransition on first match")
-	}
+		got := checkWithTransition(r, "approved", true, "true")
+		if got {
+			t.Error("expected false when seeding state-based condition")
+		}
+		if !r.HasFiredForState("approved", "true") {
+			t.Error("expected state to be recorded even during seeding")
+		}
 
-	// Second check: same state, should be deduped
-	got = checkWithTransition(r, "approved", true, "true")
-	if got {
-		t.Error("expected false on second check with same state (seeding dedup)")
-	}
+		// After seeding, same state should still be deduped
+		r.Seeding = false
+		got = checkWithTransition(r, "approved", true, "true")
+		if got {
+			t.Error("expected false on same state after seeding (dedup)")
+		}
+	})
+
+	t.Run("state-based: fires after seeding when state transitions", func(t *testing.T) {
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		// Seed with current state
+		checkWithTransition(r, "approved", true, "true")
+		r.Seeding = false
+
+		// State reverts
+		checkWithTransition(r, "approved", false, "")
+
+		// State transitions back → should fire
+		got := checkWithTransition(r, "approved", true, "true")
+		if !got {
+			t.Error("expected true after false→true transition post-seeding")
+		}
+	})
+
+	t.Run("event-based: seeding does not suppress", func(t *testing.T) {
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		got := checkWithTransition(r, "commented", true, "")
+		if !got {
+			t.Error("expected true for event-based condition even during seeding")
+		}
+	})
 }

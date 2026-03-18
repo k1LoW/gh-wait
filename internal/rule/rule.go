@@ -30,6 +30,8 @@ type WatchRule struct {
 	IgnoreUsers   []string          `json:"ignore_users,omitempty"`  // regex patterns of users to ignore
 	FiredStates   map[string]string `json:"fired_states,omitempty"`  // state-based condition dedup (condition -> stateKey)
 
+	Seeding bool `json:"-"` // transient: when true, state-based conditions seed without triggering
+
 	ignoreUsersOnce    sync.Once        `json:"-"`
 	compiledIgnoreUsers []*regexp.Regexp `json:"-"`
 }

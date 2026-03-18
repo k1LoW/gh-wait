@@ -306,6 +306,25 @@ func (m *mockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditi
 	return m.CheckConditions(ctx, r, conditions)
 }
 
+// seedingCaptureMockChecker captures the Seeding flag during Check.
+type seedingCaptureMockChecker struct {
+	result          bool
+	capturedSeeding *bool
+}
+
+func (m *seedingCaptureMockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+	*m.capturedSeeding = r.Seeding
+	return m.result, nil
+}
+
+func (m *seedingCaptureMockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, _ []string) (bool, error) {
+	return m.result, nil
+}
+
+func (m *seedingCaptureMockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+	return m.CheckConditions(ctx, r, conditions)
+}
+
 type mockAction struct {
 	executed []string
 }
@@ -315,27 +334,49 @@ func (m *mockAction) Execute(r *rule.WatchRule) error {
 	return nil
 }
 
-func TestCheckRulesFirstCheckSeeding(t *testing.T) {
+func TestCheckRulesFirstCheckSetsSeeding(t *testing.T) {
 	s := NewState(0)
-	// LastCheckedAt is zero → first check
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, Interval: "0s"})
+	// LastCheckedAt is zero → first check → Seeding should be set.
+	// Use Until to make it a continuous rule so it isn't removed after trigger.
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions: []string{"commented"},
+		Until:      []string{"closed"},
+		Interval:   "0s",
+	})
 
-	mc := &mockChecker{result: true}
+	// Use a checker that captures the Seeding flag value during Check
+	var seedingDuringCheck bool
+	mc := &seedingCaptureMockChecker{
+		result:          false, // no match on first check
+		capturedSeeding: &seedingDuringCheck,
+	}
 	ma := &mockAction{}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	// First check: should seed state without executing action
 	CheckRules(context.Background(), s, checkers, ma)
 
-	if len(ma.executed) != 0 {
-		t.Errorf("expected no action on first check (seeding), got %v", ma.executed)
+	if !seedingDuringCheck {
+		t.Error("expected Seeding=true during first check")
 	}
+
+	// Seeding should be cleared after first check
 	rules := s.Rules()
-	if len(rules) != 1 {
-		t.Error("expected rule to remain after first check seeding")
+	if len(rules) == 0 {
+		t.Fatal("expected rule to remain")
+	}
+	if rules[0].Seeding {
+		t.Error("expected Seeding to be cleared after check")
 	}
 	if rules[0].LastCheckedAt.IsZero() {
 		t.Error("expected LastCheckedAt to be set after first check")
+	}
+
+	// Second check: Seeding should be false
+	seedingDuringCheck = false
+	CheckRules(context.Background(), s, checkers, ma)
+	if seedingDuringCheck {
+		t.Error("expected Seeding=false on second check")
 	}
 }
 

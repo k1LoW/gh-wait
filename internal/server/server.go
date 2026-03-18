@@ -446,15 +446,20 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		}
 
 		// Detect first check before updating LastCheckedAt.
-		// On the first check, we seed state-transition tracking without
-		// triggering actions, so pre-existing states (e.g., CI already
-		// finished) don't cause an immediate false trigger.
 		isFirstCheck := r.LastCheckedAt.IsZero()
 
 		// Update LastCheckedAt unconditionally for interval scheduling.
 		// Use updateLastCheckedAt to avoid triggering backup on every tick.
 		r.LastCheckedAt = now
 		state.updateLastCheckedAt(r)
+
+		// On the first check, enable seeding mode so that
+		// checkWithTransition records state-based conditions without
+		// triggering actions, while event-based conditions (e.g.,
+		// commented) still fire normally.
+		if isFirstCheck {
+			r.Seeding = true
+		}
 
 		// Step 1: Check until (termination) conditions.
 		// Use CheckState (no transition tracking) because until conditions
@@ -463,6 +468,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			untilMatched, err := c.CheckState(ctx, r, r.Until)
 			if err != nil {
 				slog.Error("until check failed", "rule_id", r.ID, "error", err)
+				r.Seeding = false
 				continue
 			}
 			if untilMatched {
@@ -482,22 +488,17 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 
 		// Step 2: Check trigger conditions
 		if len(r.Conditions) == 0 {
+			r.Seeding = false
 			continue
 		}
 
 		matched, err := c.Check(ctx, r)
+		r.Seeding = false
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
 			continue
 		}
 		if matched {
-			if isFirstCheck {
-				// First check: state recorded by checkWithTransition, but
-				// don't trigger action to avoid false positives from
-				// pre-existing state.
-				slog.Info("first check: seeding trigger state", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-				continue
-			}
 			slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
 			executeAction(act, r)
 
