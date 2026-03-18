@@ -481,7 +481,6 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 					if len(r.Conditions) == 0 {
 						// Until-only mode: execute action when until condition is met
 						executeAction(act, r)
-						r.LastTriggeredAt = now
 					}
 					state.MarkTriggered(r.ID)
 					state.RemoveRule(r.ID)
