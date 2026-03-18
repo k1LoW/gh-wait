@@ -60,7 +60,9 @@ func (s *State) Rules() []*rule.WatchRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]*rule.WatchRule, len(s.rules))
-	copy(result, s.rules)
+	for i, r := range s.rules {
+		result[i] = r.Clone()
+	}
 	return result
 }
 

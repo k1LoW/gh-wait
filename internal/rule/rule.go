@@ -3,6 +3,7 @@ package rule
 import (
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -50,6 +51,44 @@ func (r *WatchRule) CompiledIgnoreUsers() []*regexp.Regexp {
 		}
 	})
 	return r.compiledIgnoreUsers
+}
+
+// Clone returns a deep copy of the rule, safe for concurrent read access.
+// The sync.Once for compiled ignore-user regexps is intentionally not copied.
+func (r *WatchRule) Clone() *WatchRule {
+	cp := &WatchRule{
+		ID:              r.ID,
+		Type:            r.Type,
+		Repo:            r.Repo,
+		Number:          r.Number,
+		Action:          r.Action,
+		URL:             r.URL,
+		CreatedAt:       r.CreatedAt,
+		Status:          r.Status,
+		MaxCount:        r.MaxCount,
+		TriggerCount:    r.TriggerCount,
+		LastCheckedAt:   r.LastCheckedAt,
+		LastTriggeredAt: r.LastTriggeredAt,
+		Interval:        r.Interval,
+		Seeding:         r.Seeding,
+	}
+	if r.Conditions != nil {
+		cp.Conditions = make([]string, len(r.Conditions))
+		copy(cp.Conditions, r.Conditions)
+	}
+	if r.Until != nil {
+		cp.Until = make([]string, len(r.Until))
+		copy(cp.Until, r.Until)
+	}
+	if r.IgnoreUsers != nil {
+		cp.IgnoreUsers = make([]string, len(r.IgnoreUsers))
+		copy(cp.IgnoreUsers, r.IgnoreUsers)
+	}
+	if r.FiredStates != nil {
+		cp.FiredStates = make(map[string]string, len(r.FiredStates))
+		maps.Copy(cp.FiredStates, r.FiredStates)
+	}
+	return cp
 }
 
 func GenerateID(typ, repo string, number int, conditions, until []string, maxCount int, ignoreUsers []string) string {
