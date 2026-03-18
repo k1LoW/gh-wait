@@ -315,9 +315,41 @@ func (m *mockAction) Execute(r *rule.WatchRule) error {
 	return nil
 }
 
+func TestCheckRulesFirstCheckSeeding(t *testing.T) {
+	s := NewState(0)
+	// LastCheckedAt is zero → first check
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, Interval: "0s"})
+
+	mc := &mockChecker{result: true}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, ma)
+
+	// First check should NOT execute action (seeding state)
+	if len(ma.executed) != 0 {
+		t.Errorf("expected no action on first check (seeding), got %v", ma.executed)
+	}
+	// Rule should remain
+	rules := s.Rules()
+	if len(rules) != 1 {
+		t.Error("expected rule to remain after first check seeding")
+	}
+	// LastCheckedAt should now be set
+	if rules[0].LastCheckedAt.IsZero() {
+		t.Error("expected LastCheckedAt to be set after first check")
+	}
+
+	// Second check should trigger normally
+	CheckRules(context.Background(), s, checkers, ma)
+	if len(ma.executed) != 1 || ma.executed[0] != "r1" {
+		t.Errorf("expected action on second check, got %v", ma.executed)
+	}
+}
+
 func TestCheckRulesMatched(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	mc := &mockChecker{result: true}
 	ma := &mockAction{}
@@ -335,7 +367,7 @@ func TestCheckRulesMatched(t *testing.T) {
 
 func TestCheckRulesNotMatched(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	mc := &mockChecker{result: false}
 	ma := &mockAction{}
@@ -353,7 +385,7 @@ func TestCheckRulesNotMatched(t *testing.T) {
 
 func TestCheckRulesNotifyAction(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "notify", Status: "watching", Conditions: []string{"approved"}})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "notify", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	mc := &mockChecker{result: true}
 	ma := &mockAction{}
@@ -373,8 +405,8 @@ func TestCheckRulesNotifyAction(t *testing.T) {
 
 func TestCheckRulesMultipleTypes(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "pr1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}})
-	s.AddRule(&rule.WatchRule{ID: "issue1", Type: "issue", Action: "open", Status: "watching", Conditions: []string{"closed"}})
+	s.AddRule(&rule.WatchRule{ID: "pr1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
+	s.AddRule(&rule.WatchRule{ID: "issue1", Type: "issue", Action: "open", Status: "watching", Conditions: []string{"closed"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	prMock := &mockChecker{result: true}
 	issueMock := &mockChecker{result: false}
@@ -398,8 +430,9 @@ func TestCheckRulesContinuousWithUntil(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
 		ID: "r1", Type: "pr", Action: "open", Status: "watching",
-		Conditions: []string{"commented"},
-		Until:      []string{"closed"},
+		Conditions:    []string{"commented"},
+		Until:         []string{"closed"},
+		LastCheckedAt: time.Now().Add(-time.Minute),
 	})
 
 	// commented matches, closed does not
@@ -429,8 +462,9 @@ func TestCheckRulesUntilMatched(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
 		ID: "r1", Type: "pr", Action: "open", Status: "watching",
-		Conditions: []string{"commented"},
-		Until:      []string{"closed"},
+		Conditions:    []string{"commented"},
+		Until:         []string{"closed"},
+		LastCheckedAt: time.Now().Add(-time.Minute),
 	})
 
 	// closed matches → rule should be removed without executing action
@@ -453,8 +487,9 @@ func TestCheckRulesUntilOnlyMode(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
 		ID: "r1", Type: "pr", Action: "open", Status: "watching",
-		Conditions: nil,
-		Until:      []string{"closed"},
+		Conditions:    nil,
+		Until:         []string{"closed"},
+		LastCheckedAt: time.Now().Add(-time.Minute),
 	})
 
 	// closed matches → should execute action and remove rule
@@ -476,10 +511,11 @@ func TestCheckRulesMaxCount(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
 		ID: "r1", Type: "pr", Action: "open", Status: "watching",
-		Conditions:   []string{"commented"},
-		MaxCount:     2,
-		TriggerCount: 0,
-		Interval:     "0s",
+		Conditions:    []string{"commented"},
+		MaxCount:      2,
+		TriggerCount:  0,
+		Interval:      "0s",
+		LastCheckedAt: time.Now().Add(-time.Minute),
 	})
 
 	mc := &mockChecker{conditionResult: map[string]bool{"commented": true}}
@@ -511,10 +547,11 @@ func TestCheckRulesMaxCountWithUntil(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
 		ID: "r1", Type: "pr", Action: "open", Status: "watching",
-		Conditions:   []string{"commented"},
-		Until:        []string{"merged"},
-		MaxCount:     3,
-		TriggerCount: 2,
+		Conditions:    []string{"commented"},
+		Until:         []string{"merged"},
+		MaxCount:      3,
+		TriggerCount:  2,
+		LastCheckedAt: time.Now().Add(-time.Minute),
 	})
 
 	// commented matches, merged does not → third trigger reaches MaxCount

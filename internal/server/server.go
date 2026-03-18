@@ -445,6 +445,12 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			continue
 		}
 
+		// Detect first check before updating LastCheckedAt.
+		// On the first check, we seed state-transition tracking without
+		// triggering actions, so pre-existing states (e.g., CI already
+		// finished) don't cause an immediate false trigger.
+		isFirstCheck := r.LastCheckedAt.IsZero()
+
 		// Update LastCheckedAt unconditionally for interval scheduling.
 		// Use updateLastCheckedAt to avoid triggering backup on every tick.
 		r.LastCheckedAt = now
@@ -460,14 +466,17 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 				continue
 			}
 			if untilMatched {
-				slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-				if len(r.Conditions) == 0 {
-					// Until-only mode: execute action when until condition is met
-					executeAction(act, r)
+				if !isFirstCheck {
+					slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+					if len(r.Conditions) == 0 {
+						// Until-only mode: execute action when until condition is met
+						executeAction(act, r)
+					}
+					state.MarkTriggered(r.ID)
+					state.RemoveRule(r.ID)
+					continue
 				}
-				state.MarkTriggered(r.ID)
-				state.RemoveRule(r.ID)
-				continue
+				slog.Info("first check: seeding until state", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
 			}
 		}
 
@@ -482,6 +491,13 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			continue
 		}
 		if matched {
+			if isFirstCheck {
+				// First check: state recorded by checkWithTransition, but
+				// don't trigger action to avoid false positives from
+				// pre-existing state.
+				slog.Info("first check: seeding trigger state", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+				continue
+			}
 			slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
 			executeAction(act, r)
 
