@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.5.0](https://github.com/k1LoW/gh-wait/compare/v0.4.2...v0.5.0) - 2026-03-18
+### New Features 🎉
+- feat: replace TYPE/REPO/NUMBER columns with URL and add LAST_CHECKED_AT by @k1LoW in https://github.com/k1LoW/gh-wait/pull/21
+### Fix bug 🐛
+- fix: skip action execution on first check to avoid false triggers by @k1LoW in https://github.com/k1LoW/gh-wait/pull/19
+
 ## [v0.4.2](https://github.com/k1LoW/gh-wait/compare/v0.4.1...v0.4.2) - 2026-03-17
 ### Fix bug 🐛
 - fix: skip user filtering for until (termination) conditions by @k1LoW in https://github.com/k1LoW/gh-wait/pull/18
