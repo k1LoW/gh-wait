@@ -324,26 +324,51 @@ func TestCheckRulesFirstCheckSeeding(t *testing.T) {
 	ma := &mockAction{}
 	checkers := map[string]checker.Checker{"pr": mc}
 
+	// First check: should seed state without executing action
 	CheckRules(context.Background(), s, checkers, ma)
 
-	// First check should NOT execute action (seeding state)
 	if len(ma.executed) != 0 {
 		t.Errorf("expected no action on first check (seeding), got %v", ma.executed)
 	}
-	// Rule should remain
 	rules := s.Rules()
 	if len(rules) != 1 {
 		t.Error("expected rule to remain after first check seeding")
 	}
-	// LastCheckedAt should now be set
 	if rules[0].LastCheckedAt.IsZero() {
 		t.Error("expected LastCheckedAt to be set after first check")
 	}
+}
 
-	// Second check should trigger normally
+func TestCheckRulesFirstCheckSeedingUntilOnly(t *testing.T) {
+	s := NewState(0)
+	// Until-only rule with LastCheckedAt zero → first check
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Until:    []string{"closed"},
+		Interval: "0s",
+	})
+
+	mc := &mockChecker{conditionResult: map[string]bool{"closed": true}}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	// First check: until matches but should be seeded, not triggered
 	CheckRules(context.Background(), s, checkers, ma)
-	if len(ma.executed) != 1 || ma.executed[0] != "r1" {
+
+	if len(ma.executed) != 0 {
+		t.Errorf("expected no action on first check (seeding until), got %v", ma.executed)
+	}
+	if len(s.Rules()) != 1 {
+		t.Error("expected rule to remain after first check seeding")
+	}
+
+	// Second check: until condition still matches → should trigger
+	CheckRules(context.Background(), s, checkers, ma)
+	if len(ma.executed) != 1 {
 		t.Errorf("expected action on second check, got %v", ma.executed)
+	}
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed after until matched")
 	}
 }
 
