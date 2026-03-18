@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/k1LoW/gh-wait/internal/rule"
+	"github.com/mergestat/timediff"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,7 @@ var listCmd = &cobra.Command{
 	Long: `List all watch rules registered on the gh-wait server.
 
 By default, output is a human-readable table with columns:
-  ID, TYPE, REPO, NUMBER, CONDITIONS, UNTIL, COUNT, INTERVAL, ACTION, STATUS
+  ID, URL, CONDITIONS, UNTIL, COUNT, INTERVAL, ACTION, STATUS, LAST_CHECKED_AT
 
 Use --json to output the rules as a JSON array for programmatic use.
 
@@ -54,7 +55,7 @@ The server must be running for this command to work.`,
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTYPE\tREPO\tNUMBER\tCONDITIONS\tUNTIL\tCOUNT\tINTERVAL\tACTION\tSTATUS")
+		fmt.Fprintln(w, "ID\tURL\tCONDITIONS\tUNTIL\tCOUNT\tINTERVAL\tACTION\tSTATUS\tLAST_CHECKED_AT")
 		for _, r := range rules {
 			untilStr := "-"
 			if len(r.Until) > 0 {
@@ -70,9 +71,13 @@ The server must be running for this command to work.`,
 			if intervalStr == "" {
 				intervalStr = rule.DefaultIntervalStr
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				r.ID, r.Type, r.Repo, r.Number,
-				strings.Join(r.Conditions, ","), untilStr, countStr, intervalStr, r.Action, r.Status)
+			lastCheckedStr := "-"
+			if !r.LastCheckedAt.IsZero() {
+				lastCheckedStr = timediff.TimeDiff(r.LastCheckedAt)
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				r.ID, r.URL,
+				strings.Join(r.Conditions, ","), untilStr, countStr, intervalStr, r.Action, r.Status, lastCheckedStr)
 		}
 		return w.Flush()
 	},
