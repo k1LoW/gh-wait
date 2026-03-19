@@ -240,6 +240,9 @@ func (s *State) Load() error {
 	if err := json.Unmarshal(data, &rules); err != nil {
 		return fmt.Errorf("failed to unmarshal state: %w", err)
 	}
+	for _, r := range rules {
+		r.CompiledIgnoreUsers()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rules = rules
