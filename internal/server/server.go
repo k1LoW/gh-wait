@@ -43,6 +43,8 @@ func NewState(port int) *State {
 }
 
 func (s *State) AddRule(r *rule.WatchRule) {
+	// Pre-compile ignore-user regexps so clones can share the cache.
+	r.CompiledIgnoreUsers()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Deduplicate by ID
@@ -53,8 +55,6 @@ func (s *State) AddRule(r *rule.WatchRule) {
 			return
 		}
 	}
-	// Pre-compile ignore-user regexps so clones can share the cache.
-	r.CompiledIgnoreUsers()
 	s.rules = append(s.rules, r)
 	s.notifyBackup()
 }
