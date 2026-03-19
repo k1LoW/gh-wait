@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.0](https://github.com/k1LoW/gh-wait/compare/v0.5.0...v0.6.0) - 2026-03-19
+### New Features 🎉
+- feat: replace LAST_CHECKED_AT with LAST_TRIGGERED_AT in list output by @k1LoW in https://github.com/k1LoW/gh-wait/pull/22
+
 ## [v0.5.0](https://github.com/k1LoW/gh-wait/compare/v0.4.2...v0.5.0) - 2026-03-18
 ### New Features 🎉
 - feat: replace TYPE/REPO/NUMBER columns with URL and add LAST_CHECKED_AT by @k1LoW in https://github.com/k1LoW/gh-wait/pull/21
