@@ -53,6 +53,8 @@ func (s *State) AddRule(r *rule.WatchRule) {
 			return
 		}
 	}
+	// Pre-compile ignore-user regexps so clones can share the cache.
+	r.CompiledIgnoreUsers()
 	s.rules = append(s.rules, r)
 	s.notifyBackup()
 }
