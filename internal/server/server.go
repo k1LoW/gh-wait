@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,6 +43,8 @@ func NewState(port int) *State {
 }
 
 func (s *State) AddRule(r *rule.WatchRule) {
+	// Pre-compile ignore-user regexps so clones can share the cache.
+	r.CompiledIgnoreUsers()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Deduplicate by ID
@@ -60,7 +63,9 @@ func (s *State) Rules() []*rule.WatchRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]*rule.WatchRule, len(s.rules))
-	copy(result, s.rules)
+	for i, r := range s.rules {
+		result[i] = r.Clone()
+	}
 	return result
 }
 
@@ -101,13 +106,32 @@ func (s *State) updateLastCheckedAt(r *rule.WatchRule) {
 	}
 }
 
+// syncFiredStates deep-copies FiredStates from a cloned rule back to the
+// original without triggering a backup.
+func (s *State) syncFiredStates(r *rule.WatchRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, existing := range s.rules {
+		if existing.ID == r.ID {
+			if r.FiredStates != nil {
+				cp := make(map[string]string, len(r.FiredStates))
+				maps.Copy(cp, r.FiredStates)
+				s.rules[i].FiredStates = cp
+			} else {
+				s.rules[i].FiredStates = nil
+			}
+			return
+		}
+	}
+}
+
 func (s *State) WatchingRules() []*rule.WatchRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var result []*rule.WatchRule
 	for _, r := range s.rules {
 		if r.Status == "watching" {
-			result = append(result, r)
+			result = append(result, r.Clone())
 		}
 	}
 	return result
@@ -215,6 +239,9 @@ func (s *State) Load() error {
 	var rules []*rule.WatchRule
 	if err := json.Unmarshal(data, &rules); err != nil {
 		return fmt.Errorf("failed to unmarshal state: %w", err)
+	}
+	for _, r := range rules {
+		r.CompiledIgnoreUsers()
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -498,6 +525,8 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 
 		matched, err := c.Check(ctx, r)
 		r.Seeding = false
+		// Sync FiredStates back (deep copy) after checker may have mutated them.
+		state.syncFiredStates(r)
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
 			if isFirstCheck {
@@ -511,6 +540,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			executeAction(act, r)
 
 			r.TriggerCount++
+			r.LastTriggeredAt = now
 			state.UpdateRule(r)
 
 			// Step 3: Determine if rule should be removed

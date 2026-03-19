@@ -3,6 +3,7 @@ package rule
 import (
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -25,7 +26,8 @@ type WatchRule struct {
 	Until         []string  `json:"until,omitempty"`         // termination conditions (any match ends the rule)
 	MaxCount      int       `json:"max_count,omitempty"`     // 0=unlimited, N=end after N triggers
 	TriggerCount  int       `json:"trigger_count"`           // current trigger count
-	LastCheckedAt time.Time `json:"last_checked_at,omitzero"`
+	LastCheckedAt   time.Time `json:"last_checked_at,omitzero"`
+	LastTriggeredAt time.Time `json:"last_triggered_at,omitzero"`
 	Interval      string            `json:"interval,omitempty"`      // polling interval (e.g., "30sec", "5min", "1h")
 	IgnoreUsers   []string          `json:"ignore_users,omitempty"`  // regex patterns of users to ignore
 	FiredStates   map[string]string `json:"fired_states,omitempty"`  // state-based condition dedup (condition -> stateKey)
@@ -49,6 +51,50 @@ func (r *WatchRule) CompiledIgnoreUsers() []*regexp.Regexp {
 		}
 	})
 	return r.compiledIgnoreUsers
+}
+
+// Clone returns a deep copy of the rule.
+// Compiled ignore-user regexps are shared (read-only) to avoid recompilation.
+func (r *WatchRule) Clone() *WatchRule {
+	cp := &WatchRule{
+		ID:              r.ID,
+		Type:            r.Type,
+		Repo:            r.Repo,
+		Number:          r.Number,
+		Action:          r.Action,
+		URL:             r.URL,
+		CreatedAt:       r.CreatedAt,
+		Status:          r.Status,
+		MaxCount:        r.MaxCount,
+		TriggerCount:    r.TriggerCount,
+		LastCheckedAt:   r.LastCheckedAt,
+		LastTriggeredAt: r.LastTriggeredAt,
+		Interval:        r.Interval,
+		Seeding:         r.Seeding,
+	}
+	if r.Conditions != nil {
+		cp.Conditions = make([]string, len(r.Conditions))
+		copy(cp.Conditions, r.Conditions)
+	}
+	if r.Until != nil {
+		cp.Until = make([]string, len(r.Until))
+		copy(cp.Until, r.Until)
+	}
+	if r.IgnoreUsers != nil {
+		cp.IgnoreUsers = make([]string, len(r.IgnoreUsers))
+		copy(cp.IgnoreUsers, r.IgnoreUsers)
+	}
+	if r.FiredStates != nil {
+		cp.FiredStates = make(map[string]string, len(r.FiredStates))
+		maps.Copy(cp.FiredStates, r.FiredStates)
+	}
+	// Share compiled regexps (read-only) if already populated.
+	// Avoid calling CompiledIgnoreUsers() here as it mutates the source rule.
+	if r.compiledIgnoreUsers != nil {
+		cp.compiledIgnoreUsers = r.compiledIgnoreUsers
+		cp.ignoreUsersOnce.Do(func() {})
+	}
+	return cp
 }
 
 func GenerateID(typ, repo string, number int, conditions, until []string, maxCount int, ignoreUsers []string) string {

@@ -106,6 +106,86 @@ func TestSinceTime(t *testing.T) {
 	})
 }
 
+func TestClone(t *testing.T) {
+	original := &WatchRule{
+		ID:              "r1",
+		Type:            "pr",
+		Repo:            "owner/repo",
+		Number:          42,
+		Conditions:      []string{"approved", "merged"},
+		Action:          "open",
+		URL:             "https://github.com/owner/repo/pull/42",
+		CreatedAt:       time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		Status:          "watching",
+		Until:           []string{"closed"},
+		MaxCount:        3,
+		TriggerCount:    1,
+		LastCheckedAt:   time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+		LastTriggeredAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+		Interval:        "5min",
+		IgnoreUsers:     []string{"bot-.*", "dependabot"},
+		FiredStates:     map[string]string{"approved": "user1"},
+	}
+
+	cp := original.Clone()
+
+	t.Run("scalar fields match", func(t *testing.T) {
+		if cp.ID != original.ID || cp.Type != original.Type || cp.Repo != original.Repo ||
+			cp.Number != original.Number || cp.Action != original.Action || cp.URL != original.URL ||
+			cp.Status != original.Status || cp.MaxCount != original.MaxCount ||
+			cp.TriggerCount != original.TriggerCount || cp.Interval != original.Interval ||
+			!cp.CreatedAt.Equal(original.CreatedAt) || !cp.LastCheckedAt.Equal(original.LastCheckedAt) ||
+			!cp.LastTriggeredAt.Equal(original.LastTriggeredAt) {
+			t.Error("scalar fields do not match")
+		}
+	})
+
+	t.Run("slices are deep copies", func(t *testing.T) {
+		cp.Conditions[0] = "changed"
+		if original.Conditions[0] == "changed" {
+			t.Error("mutating clone's Conditions affected original")
+		}
+		cp.Until[0] = "changed"
+		if original.Until[0] == "changed" {
+			t.Error("mutating clone's Until affected original")
+		}
+		cp.IgnoreUsers[0] = "changed"
+		if original.IgnoreUsers[0] == "changed" {
+			t.Error("mutating clone's IgnoreUsers affected original")
+		}
+	})
+
+	t.Run("map is a deep copy", func(t *testing.T) {
+		cp.FiredStates["approved"] = "user2"
+		if original.FiredStates["approved"] != "user1" {
+			t.Error("mutating clone's FiredStates affected original")
+		}
+	})
+
+	t.Run("compiled regexps are shared", func(t *testing.T) {
+		// Trigger compilation on original first
+		origCompiled := original.CompiledIgnoreUsers()
+		cp2 := original.Clone()
+		cp2Compiled := cp2.CompiledIgnoreUsers()
+		if len(origCompiled) != len(cp2Compiled) {
+			t.Fatalf("expected %d compiled regexps, got %d", len(origCompiled), len(cp2Compiled))
+		}
+		for i := range origCompiled {
+			if origCompiled[i] != cp2Compiled[i] {
+				t.Errorf("expected shared regexp pointer at index %d", i)
+			}
+		}
+	})
+
+	t.Run("nil fields stay nil", func(t *testing.T) {
+		minimal := &WatchRule{ID: "r2"}
+		minCp := minimal.Clone()
+		if minCp.Conditions != nil || minCp.Until != nil || minCp.IgnoreUsers != nil || minCp.FiredStates != nil {
+			t.Error("nil slice/map fields should remain nil in clone")
+		}
+	})
+}
+
 func TestSplitRepo(t *testing.T) {
 	tests := []struct {
 		input     string

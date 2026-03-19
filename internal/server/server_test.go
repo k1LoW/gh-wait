@@ -482,8 +482,12 @@ func TestCheckRulesNotMatched(t *testing.T) {
 	if len(ma.executed) != 0 {
 		t.Error("expected no action")
 	}
-	if len(s.Rules()) != 1 {
-		t.Error("expected rule to remain")
+	rules := s.Rules()
+	if len(rules) != 1 {
+		t.Fatal("expected rule to remain")
+	}
+	if !rules[0].LastTriggeredAt.IsZero() {
+		t.Error("expected LastTriggeredAt to remain zero when not triggered")
 	}
 }
 
@@ -559,6 +563,9 @@ func TestCheckRulesContinuousWithUntil(t *testing.T) {
 	}
 	if rules[0].LastCheckedAt.IsZero() {
 		t.Error("expected LastCheckedAt to be set")
+	}
+	if rules[0].LastTriggeredAt.IsZero() {
+		t.Error("expected LastTriggeredAt to be set after trigger")
 	}
 }
 
