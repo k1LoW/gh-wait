@@ -44,7 +44,7 @@ func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *r
 	case "closed":
 		matched, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, skipUserFilter)
 		return matched, "true", err
-	case "ci-completed":
+	case "ci-completed", "ci-finished":
 		return c.checkCIFinished(ctx, owner, repo, r.Number)
 	case "ci-failed":
 		return c.checkCIFailed(ctx, owner, repo, r.Number)

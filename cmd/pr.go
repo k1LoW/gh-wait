@@ -26,7 +26,7 @@ Available conditions (at least one condition or --until is required):
   --closed        Triggered when the PR is closed (without merge).
   --commented     Triggered when a new comment, review comment, or review
                   with body is posted on the PR.
-  --ci-completed   Triggered when all CI checks and commit statuses reach
+  --ci-completed  Triggered when all CI checks and commit statuses reach
                   a completed state (none pending).
   --ci-failed     Triggered when any CI check or commit status fails.
 
