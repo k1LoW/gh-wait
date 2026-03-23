@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.7.0](https://github.com/k1LoW/gh-wait/compare/v0.6.0...v0.7.0) - 2026-03-23
+### Breaking Changes 🛠
+- feat: add workflow run watching and rename ci-finished to ci-completed by @k1LoW in https://github.com/k1LoW/gh-wait/pull/24
+
 ## [v0.6.0](https://github.com/k1LoW/gh-wait/compare/v0.5.0...v0.6.0) - 2026-03-19
 ### New Features 🎉
 - feat: replace LAST_CHECKED_AT with LAST_TRIGGERED_AT in list output by @k1LoW in https://github.com/k1LoW/gh-wait/pull/22
