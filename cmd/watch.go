@@ -78,6 +78,9 @@ func buildWatchURL(cmd *cobra.Command, ruleType, repo string, number int) string
 		return u
 	}
 	owner, repoName := rule.SplitRepo(repo)
+	if ruleType == "workflow" {
+		return fmt.Sprintf("https://github.com/%s/%s/actions/runs/%d", owner, repoName, number)
+	}
 	pathSegment := "pull"
 	if ruleType == "issue" {
 		pathSegment = "issues"
@@ -99,8 +102,12 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 	}
 
 	if len(conditions) == 0 && len(until) == 0 {
-		return fmt.Errorf("at least one condition flag or --until is required (%s, --until)",
-			"--"+strings.Join(conditionFlags, ", --"))
+		if ruleType == "workflow" {
+			conditions = []string{"completed"}
+		} else {
+			return fmt.Errorf("at least one condition flag or --until is required (%s, --until)",
+				"--"+strings.Join(conditionFlags, ", --"))
+		}
 	}
 
 	url := buildWatchURL(cmd, ruleType, repo, number)
@@ -131,10 +138,19 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 		return fmt.Errorf("failed to add rule: %w", err)
 	}
 
-	typeLabel := "PR"
-	if ruleType == "issue" {
+	var typeLabel string
+	switch ruleType {
+	case "pr":
+		typeLabel = "PR"
+	case "issue":
 		typeLabel = "Issue"
+	case "workflow":
+		typeLabel = "Workflow run"
 	}
-	fmt.Printf("Watching %s #%d on %s for: %s (action: %s)\n", typeLabel, number, repo, strings.Join(conditions, ", "), action)
+	if ruleType == "workflow" {
+		fmt.Printf("Watching %s %d on %s for: %s (action: %s)\n", typeLabel, number, repo, strings.Join(conditions, ", "), action)
+	} else {
+		fmt.Printf("Watching %s #%d on %s for: %s (action: %s)\n", typeLabel, number, repo, strings.Join(conditions, ", "), action)
+	}
 	return nil
 }

@@ -385,8 +385,9 @@ func Run(ctx context.Context, addr string, port int) error {
 	}
 
 	checkers := map[string]checker.Checker{
-		"pr":    checker.NewPRChecker(ghClient, currentUser),
-		"issue": checker.NewIssueChecker(ghClient, currentUser),
+		"pr":       checker.NewPRChecker(ghClient, currentUser),
+		"issue":    checker.NewIssueChecker(ghClient, currentUser),
+		"workflow": checker.NewWorkflowChecker(ghClient, currentUser),
 	}
 	openAction := &action.OpenBrowserAction{}
 

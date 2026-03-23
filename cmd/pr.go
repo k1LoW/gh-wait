@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var prConditionFlags = []string{"approved", "merged", "closed", "commented", "ci-finished", "ci-failed"}
+var prConditionFlags = []string{"approved", "merged", "closed", "commented", "ci-completed", "ci-failed"}
 
 var prCmd = &cobra.Command{
 	Use:   "pr [number]",
@@ -26,7 +26,7 @@ Available conditions (at least one condition or --until is required):
   --closed        Triggered when the PR is closed (without merge).
   --commented     Triggered when a new comment, review comment, or review
                   with body is posted on the PR.
-  --ci-finished   Triggered when all CI checks and commit statuses reach
+  --ci-completed   Triggered when all CI checks and commit statuses reach
                   a completed state (none pending).
   --ci-failed     Triggered when any CI check or commit status fails.
 
@@ -61,7 +61,7 @@ Filtering:
   gh wait pr 42 --commented --until merged
 
   # Watch PR for CI completion with 1-minute polling
-  gh wait pr 42 --ci-finished --interval 1min
+  gh wait pr 42 --ci-completed --interval 1min
 
   # Watch PR for approval, trigger up to 3 times, stop when closed
   gh wait pr 42 --approved --count 3 --until closed
@@ -116,6 +116,6 @@ func init() {
 	prCmd.Flags().Bool("merged", false, "Watch for merge")
 	prCmd.Flags().Bool("closed", false, "Watch for close")
 	prCmd.Flags().Bool("commented", false, "Watch for new comments")
-	prCmd.Flags().Bool("ci-finished", false, "Watch for CI completion")
+	prCmd.Flags().Bool("ci-completed", false, "Watch for CI completion")
 	prCmd.Flags().Bool("ci-failed", false, "Watch for CI failure")
 }
