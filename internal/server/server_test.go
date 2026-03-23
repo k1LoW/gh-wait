@@ -307,22 +307,28 @@ func (m *mockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditi
 	return m.CheckConditions(ctx, r, conditions)
 }
 
-// seedingCaptureMockChecker captures the Seeding flag during Check.
-type seedingCaptureMockChecker struct {
+// captureMockChecker captures rule state during Check.
+type captureMockChecker struct {
 	result          bool
 	capturedSeeding *bool
+	capturedSince   *time.Time
 }
 
-func (m *seedingCaptureMockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
-	*m.capturedSeeding = r.Seeding
+func (m *captureMockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+	if m.capturedSeeding != nil {
+		*m.capturedSeeding = r.Seeding
+	}
+	if m.capturedSince != nil {
+		*m.capturedSince = r.SinceTime()
+	}
 	return m.result, nil
 }
 
-func (m *seedingCaptureMockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, _ []string) (bool, error) {
+func (m *captureMockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, _ []string) (bool, error) {
 	return m.result, nil
 }
 
-func (m *seedingCaptureMockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (m *captureMockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
 	return m.CheckConditions(ctx, r, conditions)
 }
 
@@ -348,7 +354,7 @@ func TestCheckRulesFirstCheckSetsSeeding(t *testing.T) {
 
 	// Use a checker that captures the Seeding flag value during Check
 	var seedingDuringCheck bool
-	mc := &seedingCaptureMockChecker{
+	mc := &captureMockChecker{
 		result:          false, // no match on first check
 		capturedSeeding: &seedingDuringCheck,
 	}
@@ -406,7 +412,7 @@ func TestCheckRulesFirstCheckErrorRetriesSeeding(t *testing.T) {
 
 	// Second check succeeds with Seeding (because LastCheckedAt is still zero)
 	var seedingDuringCheck bool
-	mc2 := &seedingCaptureMockChecker{
+	mc2 := &captureMockChecker{
 		result:          false,
 		capturedSeeding: &seedingDuringCheck,
 	}
@@ -415,6 +421,43 @@ func TestCheckRulesFirstCheckErrorRetriesSeeding(t *testing.T) {
 
 	if !seedingDuringCheck {
 		t.Error("expected Seeding=true on retry after previous error")
+	}
+}
+
+func TestCheckRulesSinceTimePreserved(t *testing.T) {
+	prevChecked := time.Now().Add(-time.Minute)
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		Conditions:    []string{"commented"},
+		Until:         []string{"closed"},
+		Interval:      "0s",
+		LastCheckedAt: prevChecked,
+	})
+
+	var capturedSince time.Time
+	mc := &captureMockChecker{
+		result:        false,
+		capturedSince: &capturedSince,
+	}
+	ma := &mockAction{}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, ma)
+
+	// The checker should see the previous LastCheckedAt via SinceTime(),
+	// not the current time.
+	if !capturedSince.Equal(prevChecked) {
+		t.Errorf("expected SinceTime()=%v during check, got %v", prevChecked, capturedSince)
+	}
+
+	// State's LastCheckedAt should have advanced for interval scheduling.
+	rules := s.Rules()
+	if len(rules) == 0 {
+		t.Fatal("expected rule to remain")
+	}
+	if !rules[0].LastCheckedAt.After(prevChecked) {
+		t.Errorf("expected state LastCheckedAt to advance past %v, got %v", prevChecked, rules[0].LastCheckedAt)
 	}
 }
 
