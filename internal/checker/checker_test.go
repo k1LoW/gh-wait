@@ -40,17 +40,17 @@ func TestCheckWithTransitionDifferentStateKey(t *testing.T) {
 	r := &rule.WatchRule{ID: "r1"}
 
 	// First match with sha1
-	if got := checkWithTransition(r, "ci-finished", true, "sha1"); !got {
+	if got := checkWithTransition(r, "ci-completed", true, "sha1"); !got {
 		t.Error("expected true on first state match")
 	}
 
 	// Different stateKey (new commit pushed) → should fire
-	if got := checkWithTransition(r, "ci-finished", true, "sha2"); !got {
+	if got := checkWithTransition(r, "ci-completed", true, "sha2"); !got {
 		t.Error("expected true on new stateKey (state transition)")
 	}
 
 	// Same stateKey sha2 again → deduped
-	if got := checkWithTransition(r, "ci-finished", true, "sha2"); got {
+	if got := checkWithTransition(r, "ci-completed", true, "sha2"); got {
 		t.Error("expected false on duplicate stateKey")
 	}
 }

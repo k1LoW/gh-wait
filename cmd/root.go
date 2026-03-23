@@ -31,16 +31,17 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "gh-wait",
 	Short: "Wait for GitHub events and get notified",
-	Long: `gh-wait is a GitHub CLI extension that watches pull requests and issues
-for specific conditions (approvals, merges, CI completion, comments, etc.)
-and triggers actions (desktop notification, open in browser) when those
-conditions are met.
+	Long: `gh-wait is a GitHub CLI extension that watches pull requests, issues,
+and workflow runs for specific conditions (approvals, merges, CI completion,
+comments, workflow completion, etc.) and triggers actions (desktop notification,
+open in browser) when those conditions are met.
 
-You can pass a GitHub PR or issue URL directly instead of using
-subcommands — gh-wait will auto-detect the type:
+You can pass a GitHub URL directly instead of using subcommands —
+gh-wait will auto-detect the type:
 
   gh wait https://github.com/owner/repo/pull/42 --approved --open
   gh wait https://github.com/owner/repo/issues/5 --commented
+  gh wait https://github.com/owner/repo/actions/runs/12345
 
 It uses a client-server architecture: a background server polls the GitHub
 API at configurable intervals and evaluates watch rules. The server is
@@ -58,6 +59,9 @@ server restarts.`,
   # Watch an issue by URL
   gh wait https://github.com/owner/repo/issues/5 --commented
 
+  # Watch a workflow run by URL
+  gh wait https://github.com/owner/repo/actions/runs/12345
+
   # Watch the current branch's PR for approval, open browser when approved
   gh wait pr --approved --open
 
@@ -68,7 +72,7 @@ server restarts.`,
   gh wait pr 42 --commented --until merged --interval 1min
 
   # Watch PR #10 for CI completion, trigger at most 3 times
-  gh wait pr 10 --ci-finished --count 3
+  gh wait pr 10 --ci-completed --count 3
 
   # Watch PR for approval, ignoring bot users
   gh wait pr 42 --approved --ignore-user ".*\\[bot\\]"
@@ -143,9 +147,10 @@ func transformURLArgs(args []string) ([]string, bool) {
 	return nil, false
 }
 
-// parseGitHubURL extracts the subcommand ("pr" or "issue"), "owner/repo",
-// the number, and a normalized URL from a GitHub URL. Returns ok=false if
-// the URL is not a recognized PR or issue URL.
+// parseGitHubURL extracts the subcommand ("pr", "issue", or "workflow"),
+// "owner/repo", the number (or run ID), and a normalized URL from a GitHub
+// URL. Returns ok=false if the URL is not a recognized PR, issue, or
+// workflow run URL.
 func parseGitHubURL(raw string) (subcommand, repo string, number int, normalizedURL string, ok bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -153,7 +158,10 @@ func parseGitHubURL(raw string) (subcommand, repo string, number int, normalized
 	}
 
 	// Accept github.com and GitHub Enterprise hosts.
-	// Path format: /{owner}/{repo}/pull/{number} or /{owner}/{repo}/issues/{number}
+	// Path formats:
+	//   /{owner}/{repo}/pull/{number}
+	//   /{owner}/{repo}/issues/{number}
+	//   /{owner}/{repo}/actions/runs/{runID}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) < 4 {
 		return "", "", 0, "", false
@@ -161,6 +169,17 @@ func parseGitHubURL(raw string) (subcommand, repo string, number int, normalized
 
 	owner := parts[0]
 	repoName := parts[1]
+
+	// Check for workflow run URL: /actions/runs/{id}
+	if parts[2] == "actions" && len(parts) >= 5 && parts[3] == "runs" {
+		n, err := strconv.Atoi(parts[4])
+		if err != nil || n <= 0 {
+			return "", "", 0, "", false
+		}
+		normalizedURL = fmt.Sprintf("%s://%s/%s/%s/actions/runs/%d", u.Scheme, u.Host, owner, repoName, n)
+		return "workflow", owner + "/" + repoName, n, normalizedURL, true
+	}
+
 	kind := parts[2] // "pull" or "issues"
 	numStr := parts[3]
 
