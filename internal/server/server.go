@@ -95,12 +95,12 @@ func (s *State) UpdateRule(r *rule.WatchRule) {
 }
 
 // updateLastCheckedAt updates only LastCheckedAt without triggering a backup.
-func (s *State) updateLastCheckedAt(r *rule.WatchRule) {
+func (s *State) updateLastCheckedAt(id string, t time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, existing := range s.rules {
-		if existing.ID == r.ID {
-			s.rules[i].LastCheckedAt = r.LastCheckedAt
+		if existing.ID == id {
+			s.rules[i].LastCheckedAt = t
 			return
 		}
 	}
@@ -476,10 +476,10 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		// Detect first check before updating LastCheckedAt.
 		isFirstCheck := r.LastCheckedAt.IsZero()
 
-		// Update LastCheckedAt unconditionally for interval scheduling.
-		// Use updateLastCheckedAt to avoid triggering backup on every tick.
-		r.LastCheckedAt = now
-		state.updateLastCheckedAt(r)
+		// Update state's LastCheckedAt for interval scheduling without
+		// touching the clone, so SinceTime() returns the previous check
+		// time during condition evaluation.
+		state.updateLastCheckedAt(r.ID, now)
 
 		// On the first check, enable seeding mode so that
 		// checkWithTransition records state-based conditions without
@@ -497,8 +497,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			if err != nil {
 				slog.Error("until check failed", "rule_id", r.ID, "error", err)
 				if isFirstCheck {
-					r.LastCheckedAt = time.Time{}
-					state.updateLastCheckedAt(r)
+					state.updateLastCheckedAt(r.ID, time.Time{})
 				}
 				r.Seeding = false
 				continue
@@ -531,8 +530,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 		if err != nil {
 			slog.Error("check failed", "rule_id", r.ID, "error", err)
 			if isFirstCheck {
-				r.LastCheckedAt = time.Time{}
-				state.updateLastCheckedAt(r)
+				state.updateLastCheckedAt(r.ID, time.Time{})
 			}
 			continue
 		}
@@ -542,6 +540,7 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 
 			r.TriggerCount++
 			r.LastTriggeredAt = now
+			r.LastCheckedAt = now
 			state.UpdateRule(r)
 
 			// Step 3: Determine if rule should be removed
