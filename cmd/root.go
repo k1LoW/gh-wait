@@ -31,10 +31,10 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "gh-wait",
 	Short: "Wait for GitHub events and get notified",
-	Long: `gh-wait is a GitHub CLI extension that watches pull requests and issues
-for specific conditions (approvals, merges, CI completion, comments, etc.)
-and triggers actions (desktop notification, open in browser) when those
-conditions are met.
+	Long: `gh-wait is a GitHub CLI extension that watches pull requests, issues,
+and workflow runs for specific conditions (approvals, merges, CI completion,
+comments, workflow completion, etc.) and triggers actions (desktop notification,
+open in browser) when those conditions are met.
 
 You can pass a GitHub URL directly instead of using subcommands —
 gh-wait will auto-detect the type:
@@ -147,9 +147,10 @@ func transformURLArgs(args []string) ([]string, bool) {
 	return nil, false
 }
 
-// parseGitHubURL extracts the subcommand ("pr" or "issue"), "owner/repo",
-// the number, and a normalized URL from a GitHub URL. Returns ok=false if
-// the URL is not a recognized PR or issue URL.
+// parseGitHubURL extracts the subcommand ("pr", "issue", or "workflow"),
+// "owner/repo", the number (or run ID), and a normalized URL from a GitHub
+// URL. Returns ok=false if the URL is not a recognized PR, issue, or
+// workflow run URL.
 func parseGitHubURL(raw string) (subcommand, repo string, number int, normalizedURL string, ok bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
