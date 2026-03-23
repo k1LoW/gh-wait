@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.7.1](https://github.com/k1LoW/gh-wait/compare/v0.7.0...v0.7.1) - 2026-03-23
+### Fix bug 🐛
+- fix: use previous LastCheckedAt for SinceTime() during condition checks by @k1LoW in https://github.com/k1LoW/gh-wait/pull/27
+
 ## [v0.7.0](https://github.com/k1LoW/gh-wait/compare/v0.6.0...v0.7.0) - 2026-03-23
 ### Breaking Changes 🛠
 - feat: add workflow run watching and rename ci-finished to ci-completed by @k1LoW in https://github.com/k1LoW/gh-wait/pull/24
