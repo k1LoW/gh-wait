@@ -1,12 +1,12 @@
 # gh-wait
 
-`gh-wait` is a GitHub CLI (`gh`) extension that watches pull requests and issues for specific conditions, then takes action when they are met.
+`gh-wait` is a GitHub CLI (`gh`) extension that watches pull requests, issues, and workflow runs for specific conditions, then takes action when they are met.
 
-It runs a lightweight background server that polls the GitHub API and can open your browser or notify you when conditions like approval, merge, CI completion, or new comments are detected.
+It runs a lightweight background server that polls the GitHub API and can open your browser or notify you when conditions like approval, merge, CI completion, workflow completion, or new comments are detected.
 
 ## Usage
 
-You can pass a GitHub URL directly — `gh-wait` auto-detects whether it is a PR or an issue:
+You can pass a GitHub URL directly — `gh-wait` auto-detects whether it is a PR, an issue, or a workflow run:
 
 ```bash
 # Watch a PR by URL
@@ -14,6 +14,9 @@ $ gh wait https://github.com/owner/repo/pull/123 --approved --open
 
 # Watch an issue by URL
 $ gh wait https://github.com/owner/repo/issues/456 --commented --open
+
+# Watch a workflow run by URL
+$ gh wait https://github.com/owner/repo/actions/runs/23424874935
 ```
 
 Or use the explicit subcommands:
@@ -26,10 +29,16 @@ $ gh wait pr --approved --open
 $ gh wait pr 123 --approved --open
 
 # Watch for CI completion
-$ gh wait pr 123 --ci-finished --open
+$ gh wait pr 123 --ci-completed --open
 
 # Watch for new comments on an issue
 $ gh wait issue 456 --commented --open
+
+# Watch a workflow run for completion
+$ gh wait workflow 23424874935 --repo owner/repo
+
+# Watch a workflow run for failure, open browser when failed
+$ gh wait workflow 23424874935 --repo owner/repo --failed --open
 
 # Specify a repository explicitly
 $ gh wait pr 123 --approved --open --repo owner/repo
@@ -67,6 +76,15 @@ $ gh wait pr 123 --open --until closed
 | `3`       | (omitted) | Triggers up to 3 times then removes the rule |
 | `3`       | `merged`  | Triggers up to 3 times or until merged (whichever comes first) |
 
+### Ignoring Users
+
+Use `--ignore-user` to exclude events from specific users (e.g., bots). The value is a Go regular expression matched against the username. Can be specified multiple times:
+
+```bash
+# Ignore bot users when watching for comments
+$ gh wait pr 42 --commented --ignore-user ".*\[bot\]" --ignore-user "dependabot"
+```
+
 ### Managing Rules
 
 ```bash
@@ -75,6 +93,12 @@ $ gh wait list
 
 # List in JSON format
 $ gh wait list --json
+
+# Delete a specific rule by ID
+$ gh wait delete abc1234
+
+# Delete all rules
+$ gh wait delete --all
 
 # Start/stop/restart the background server
 $ gh wait start
@@ -100,8 +124,8 @@ abc12345  https://github.com/k1LoW/gh-wait/pull/2    approved    merged  1/3    
 | Merged | `--merged` | PR has been merged |
 | Closed | `--closed` | PR has been closed |
 | Commented | `--commented` | New comments added (issue comments, review comments, or reviews with body) |
-| CI Finished | `--ci-finished` | All CI checks completed |
-| CI Failed | `--ci-failed` | At least one CI check failed |
+| CI Completed | `--ci-completed` | All CI checks and commit statuses reach a completed state (none pending) |
+| CI Failed | `--ci-failed` | At least one CI check or commit status failed |
 
 ### Issue
 
@@ -109,6 +133,14 @@ abc12345  https://github.com/k1LoW/gh-wait/pull/2    approved    merged  1/3    
 |-----------|------|-------------|
 | Commented | `--commented` | New comments added |
 | Closed | `--closed` | Issue has been closed |
+
+### Workflow Run
+
+| Condition | Flag | Description |
+|-----------|------|-------------|
+| Completed | `--completed` | Workflow run reaches any terminal state (default if no condition specified) |
+| Succeeded | `--succeeded` | Workflow run completes with success |
+| Failed | `--failed` | Workflow run completes with failure |
 
 ## Install
 
@@ -122,7 +154,6 @@ $ gh extension install k1LoW/gh-wait
 
 If `number` is omitted, the PR associated with the current branch is automatically detected via `gh pr view`.
 
-
 | Option | Description |
 |--------|-------------|
 | `--repo` | Select another repository using the `OWNER/REPO` format |
@@ -130,11 +161,12 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--merged` | Watch for merge |
 | `--closed` | Watch for close |
 | `--commented` | Watch for new comments |
-| `--ci-finished` | Watch for CI completion |
+| `--ci-completed` | Watch for CI completion |
 | `--ci-failed` | Watch for CI failure |
 | `--open` | Open in browser when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
+| `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
 | `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
 
 ### `gh wait issue <number>`
@@ -147,6 +179,23 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--open` | Open in browser when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
+| `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
+
+### `gh wait workflow <run-id>`
+
+The workflow run ID is required. You can also pass a full workflow run URL directly to `gh-wait` instead of using this subcommand.
+
+| Option | Description |
+|--------|-------------|
+| `--repo` | Select another repository using the `OWNER/REPO` format |
+| `--completed` | Watch for completion (any conclusion). Default if no condition specified |
+| `--succeeded` | Watch for success |
+| `--failed` | Watch for failure |
+| `--open` | Open in browser when condition is met |
+| `--until` | Termination condition (can be specified multiple times) |
+| `--count` | Maximum number of triggers (0 = unlimited) |
+| `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
 | `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
 
 ### `gh wait list`
@@ -154,6 +203,12 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | Option | Description |
 |--------|-------------|
 | `--json` | Output results as JSON |
+
+### `gh wait delete [id...]`
+
+| Option | Description |
+|--------|-------------|
+| `--all` | Delete all watch rules |
 
 ### Global Options
 
