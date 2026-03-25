@@ -17,6 +17,7 @@ import (
 	"github.com/k1LoW/gh-wait/internal/action"
 	"github.com/k1LoW/gh-wait/internal/checker"
 	"github.com/k1LoW/gh-wait/internal/rule"
+	"github.com/shurcooL/githubv4"
 	"github.com/k1LoW/gh-wait/version"
 )
 
@@ -384,10 +385,13 @@ func Run(ctx context.Context, addr string, port int) error {
 		slog.Warn("failed to get authenticated user, self-filtering disabled", "error", err)
 	}
 
+	v4Client := githubv4.NewClient(ghClient.Client())
+
 	checkers := map[string]checker.Checker{
-		"pr":       checker.NewPRChecker(ghClient, currentUser),
-		"issue":    checker.NewIssueChecker(ghClient, currentUser),
-		"workflow": checker.NewWorkflowChecker(ghClient, currentUser),
+		"pr":         checker.NewPRChecker(ghClient, currentUser),
+		"issue":      checker.NewIssueChecker(ghClient, currentUser),
+		"workflow":   checker.NewWorkflowChecker(ghClient, currentUser),
+		"discussion": checker.NewDiscussionChecker(v4Client, currentUser),
 	}
 	openAction := &action.OpenBrowserAction{}
 

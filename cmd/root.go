@@ -32,15 +32,16 @@ var rootCmd = &cobra.Command{
 	Use:   "gh-wait",
 	Short: "Wait for GitHub events and get notified",
 	Long: `gh-wait is a GitHub CLI extension that watches pull requests, issues,
-and workflow runs for specific conditions (approvals, merges, CI completion,
-comments, workflow completion, etc.) and triggers actions (desktop notification,
-open in browser) when those conditions are met.
+discussions, and workflow runs for specific conditions (approvals, merges,
+CI completion, comments, answers, workflow completion, etc.) and triggers
+actions (desktop notification, open in browser) when those conditions are met.
 
 You can pass a GitHub URL directly instead of using subcommands —
 gh-wait will auto-detect the type:
 
   gh wait https://github.com/owner/repo/pull/42 --approved --open
   gh wait https://github.com/owner/repo/issues/5 --commented
+  gh wait https://github.com/owner/repo/discussions/7 --answered
   gh wait https://github.com/owner/repo/actions/runs/12345
 
 It uses a client-server architecture: a background server polls the GitHub
@@ -79,6 +80,12 @@ server restarts.`,
 
   # Watch issue #5 for new comments on a specific repo
   gh wait issue 5 --commented --repo owner/repo
+
+  # Watch discussion #7 for answer
+  gh wait discussion 7 --answered
+
+  # Watch a discussion by URL
+  gh wait https://github.com/owner/repo/discussions/7 --commented
 
   # List all watch rules
   gh wait list
@@ -193,6 +200,8 @@ func parseGitHubURL(raw string) (subcommand, repo string, number int, normalized
 		subcommand = "pr"
 	case "issues":
 		subcommand = "issue"
+	case "discussions":
+		subcommand = "discussion"
 	default:
 		return "", "", 0, "", false
 	}
