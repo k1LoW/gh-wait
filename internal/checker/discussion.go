@@ -149,7 +149,7 @@ func (c *DiscussionChecker) paginateReplies(ctx context.Context, commentID githu
 	for {
 		variables := map[string]any{
 			"id":     commentID,
-			"cursor": (*githubv4.String)(cursor),
+			"cursor": cursor,
 		}
 		var q discussionCommentRepliesQuery
 		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
