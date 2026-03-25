@@ -26,15 +26,22 @@ type discussionQuery struct {
 	} `graphql:"repository(owner: $owner, name: $repo)"`
 }
 
+type discussionCommentNode struct {
+	CreatedAt time.Time
+	Author    struct {
+		Login string
+	}
+}
+
 type discussionCommentsQuery struct {
 	Repository struct {
 		Discussion struct {
 			Comments struct {
 				Nodes []struct {
-					CreatedAt time.Time
-					Author    struct {
-						Login string
-					}
+					discussionCommentNode
+					Replies struct {
+						Nodes []discussionCommentNode
+					} `graphql:"replies(last: 100)"`
 				}
 			} `graphql:"comments(last: 100)"`
 		} `graphql:"discussion(number: $number)"`
@@ -68,13 +75,14 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 		}
 		since := r.SinceTime()
 		for _, comment := range q.Repository.Discussion.Comments.Nodes {
-			if !comment.CreatedAt.After(since) {
-				continue
+			if matched, _ := c.matchComment(comment.discussionCommentNode, since, skipUserFilter, r); matched {
+				return true, "", nil
 			}
-			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.Author.Login) {
-				continue
+			for _, reply := range comment.Replies.Nodes {
+				if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
+					return true, "", nil
+				}
 			}
-			return true, "", nil
 		}
 		return false, "", nil
 	case "closed", "answered":
@@ -90,4 +98,14 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 		return true, "true", nil
 	}
 	return false, "", nil
+}
+
+func (c *DiscussionChecker) matchComment(node discussionCommentNode, since time.Time, skipUserFilter bool, r *rule.WatchRule) (bool, string) {
+	if !node.CreatedAt.After(since) {
+		return false, ""
+	}
+	if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), node.Author.Login) {
+		return false, ""
+	}
+	return true, ""
 }
