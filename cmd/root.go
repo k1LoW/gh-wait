@@ -154,7 +154,7 @@ func transformURLArgs(args []string) ([]string, bool) {
 	return nil, false
 }
 
-// parseGitHubURL extracts the subcommand ("pr", "issue", or "workflow"),
+// parseGitHubURL extracts the subcommand ("pr", "issue", "discussion", or "workflow"),
 // "owner/repo", the number (or run ID), and a normalized URL from a GitHub
 // URL. Returns ok=false if the URL is not a recognized PR, issue, or
 // workflow run URL.

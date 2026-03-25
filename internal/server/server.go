@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/k1LoW/donegroup"
-	factory "github.com/k1LoW/go-github-client/v83/factory"
 	"github.com/k1LoW/gh-wait/internal/action"
 	"github.com/k1LoW/gh-wait/internal/checker"
 	"github.com/k1LoW/gh-wait/internal/rule"
-	"github.com/shurcooL/githubv4"
 	"github.com/k1LoW/gh-wait/version"
+	factory "github.com/k1LoW/go-github-client/v83/factory"
+	"github.com/shurcooL/githubv4"
 )
 
 const (
@@ -303,14 +303,14 @@ func handleStatus(state *State) http.HandlerFunc {
 			}
 		}
 		resp := struct {
-			Version      string `json:"version"`
-			PID          int    `json:"pid"`
-			RuleCount    int    `json:"rule_count"`
-			WatchingCount int   `json:"watching_count"`
+			Version       string `json:"version"`
+			PID           int    `json:"pid"`
+			RuleCount     int    `json:"rule_count"`
+			WatchingCount int    `json:"watching_count"`
 		}{
-			Version:      version.Version,
-			PID:          os.Getpid(),
-			RuleCount:    len(rules),
+			Version:       version.Version,
+			PID:           os.Getpid(),
+			RuleCount:     len(rules),
 			WatchingCount: watchingCount,
 		}
 		w.Header().Set("Content-Type", "application/json")
