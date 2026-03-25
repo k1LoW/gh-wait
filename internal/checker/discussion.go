@@ -107,12 +107,16 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 				if matched, _ := c.matchComment(comment.discussionCommentNode, since, skipUserFilter, r); matched {
 					return true, "", nil
 				}
+				hasReplyAfterSince := false
 				for _, reply := range comment.Replies.Nodes {
+					if reply.CreatedAt.After(since) {
+						hasReplyAfterSince = true
+					}
 					if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
 						return true, "", nil
 					}
 				}
-				if comment.Replies.PageInfo.HasPreviousPage {
+				if hasReplyAfterSince && comment.Replies.PageInfo.HasPreviousPage {
 					matched, err := c.paginateReplies(ctx, comment.ID, comment.Replies.PageInfo.StartCursor, since, skipUserFilter, r)
 					if err != nil {
 						return false, "", err
