@@ -17,7 +17,6 @@ func NewDiscussionChecker(v4Client *githubv4.Client, currentUser string) *Discus
 	return &DiscussionChecker{v4Client: v4Client, currentUser: currentUser}
 }
 
-// discussionQuery fetches basic discussion fields (closed, answered, author).
 type discussionQuery struct {
 	Repository struct {
 		Discussion struct {
@@ -30,7 +29,6 @@ type discussionQuery struct {
 	} `graphql:"repository(owner: $owner, name: $repo)"`
 }
 
-// discussionCommentsQuery fetches discussion comments for the "commented" condition.
 type discussionCommentsQuery struct {
 	Repository struct {
 		Discussion struct {
@@ -41,7 +39,7 @@ type discussionCommentsQuery struct {
 						Login string
 					}
 				}
-			} `graphql:"comments(first: 100)"`
+			} `graphql:"comments(last: 100)"`
 		} `graphql:"discussion(number: $number)"`
 	} `graphql:"repository(owner: $owner, name: $repo)"`
 }
@@ -82,21 +80,14 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 			return true, "", nil
 		}
 		return false, "", nil
-	case "closed":
+	case "closed", "answered":
 		var q discussionQuery
 		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
 			return false, "", skipNotFound(err)
 		}
-		if !q.Repository.Discussion.Closed {
-			return false, "", nil
-		}
-		return true, "true", nil
-	case "answered":
-		var q discussionQuery
-		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
-			return false, "", skipNotFound(err)
-		}
-		if !q.Repository.Discussion.IsAnswered {
+		d := q.Repository.Discussion
+		matched := (cond == "closed" && d.Closed) || (cond == "answered" && d.IsAnswered)
+		if !matched {
 			return false, "", nil
 		}
 		return true, "true", nil
