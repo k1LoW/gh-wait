@@ -57,17 +57,24 @@ func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *r
 }
 
 func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
-	reviews, _, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, nil)
-	if err != nil {
-		return false, skipNotFound(err)
-	}
-	for _, review := range reviews {
-		if review.GetState() == "APPROVED" {
-			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
-				continue
-			}
-			return true, nil
+	opts := &github.ListOptions{PerPage: 100}
+	for {
+		reviews, resp, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, opts)
+		if err != nil {
+			return false, skipNotFound(err)
 		}
+		for _, review := range reviews {
+			if review.GetState() == "APPROVED" {
+				if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
+					continue
+				}
+				return true, nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 	return false, nil
 }
@@ -172,41 +179,54 @@ func (c *PRChecker) checkCIFailed(ctx context.Context, owner, repo string, numbe
 
 func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
 	since := r.SinceTime()
-	issueComments, _, err := c.client.Issues.ListComments(ctx, owner, repo, r.Number,
-		&github.IssueListCommentsOptions{Since: &since})
+
+	matched, err := checkIssueCommented(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, since, skipUserFilter)
 	if err != nil {
-		return false, skipNotFound(err)
+		return false, err
 	}
-	for _, comment := range issueComments {
-		if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
-			continue
-		}
+	if matched {
 		return true, nil
 	}
 
-	reviewComments, _, err := c.client.PullRequests.ListComments(ctx, owner, repo, r.Number,
-		&github.PullRequestListCommentsOptions{Since: since})
-	if err != nil {
-		return false, skipNotFound(err)
+	reviewOpts := &github.PullRequestListCommentsOptions{
+		Since:       since,
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	for _, comment := range reviewComments {
-		if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
-			continue
+	for {
+		reviewComments, resp, err := c.client.PullRequests.ListComments(ctx, owner, repo, r.Number, reviewOpts)
+		if err != nil {
+			return false, skipNotFound(err)
 		}
-		return true, nil
-	}
-
-	reviews, _, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, nil)
-	if err != nil {
-		return false, skipNotFound(err)
-	}
-	for _, review := range reviews {
-		if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
-			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
+		for _, comment := range reviewComments {
+			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
 				continue
 			}
 			return true, nil
 		}
+		if resp.NextPage == 0 {
+			break
+		}
+		reviewOpts.Page = resp.NextPage
+	}
+
+	listOpts := &github.ListOptions{PerPage: 100}
+	for {
+		reviews, resp, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, listOpts)
+		if err != nil {
+			return false, skipNotFound(err)
+		}
+		for _, review := range reviews {
+			if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
+				if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
+					continue
+				}
+				return true, nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		listOpts.Page = resp.NextPage
 	}
 	return false, nil
 }

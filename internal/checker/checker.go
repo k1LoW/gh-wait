@@ -3,6 +3,7 @@ package checker
 import (
 	"context"
 	"regexp"
+	"time"
 
 	"github.com/google/go-github/v83/github"
 	"github.com/k1LoW/gh-wait/internal/rule"
@@ -84,6 +85,31 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 		return false
 	}
 	return true
+}
+
+// checkIssueCommented checks for issue comments (conversation thread) updated after since.
+func checkIssueCommented(ctx context.Context, client *github.Client, currentUser string, compiled []*regexp.Regexp, owner, repo string, number int, since time.Time, skipUserFilter bool) (bool, error) {
+	opts := &github.IssueListCommentsOptions{
+		Since:       &since,
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+	for {
+		comments, resp, err := client.Issues.ListComments(ctx, owner, repo, number, opts)
+		if err != nil {
+			return false, skipNotFound(err)
+		}
+		for _, comment := range comments {
+			if !skipUserFilter && shouldIgnoreUser(currentUser, compiled, comment.GetUser().GetLogin()) {
+				continue
+			}
+			return true, nil
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return false, nil
 }
 
 // checkClosed checks whether the issue/PR is closed by someone other than an ignored user.
