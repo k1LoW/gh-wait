@@ -27,25 +27,51 @@ type discussionQuery struct {
 }
 
 type discussionCommentNode struct {
+	ID        githubv4.ID
 	CreatedAt time.Time
 	Author    struct {
 		Login string
 	}
 }
 
+type discussionCommentWithReplies struct {
+	discussionCommentNode
+	Replies struct {
+		PageInfo struct {
+			HasPreviousPage bool
+			StartCursor     githubv4.String
+		}
+		Nodes []discussionCommentNode
+	} `graphql:"replies(last: 100)"`
+}
+
 type discussionCommentsQuery struct {
 	Repository struct {
 		Discussion struct {
 			Comments struct {
-				Nodes []struct {
-					discussionCommentNode
-					Replies struct {
-						Nodes []discussionCommentNode
-					} `graphql:"replies(last: 100)"`
+				PageInfo struct {
+					HasPreviousPage bool
+					StartCursor     githubv4.String
 				}
-			} `graphql:"comments(last: 100)"`
+				Nodes []discussionCommentWithReplies
+			} `graphql:"comments(last: 100, before: $commentsCursor)"`
 		} `graphql:"discussion(number: $number)"`
 	} `graphql:"repository(owner: $owner, name: $repo)"`
+}
+
+// discussionCommentRepliesQuery is used to paginate replies for a single comment.
+type discussionCommentRepliesQuery struct {
+	Node struct {
+		DiscussionComment struct {
+			Replies struct {
+				PageInfo struct {
+					HasPreviousPage bool
+					StartCursor     githubv4.String
+				}
+				Nodes []discussionCommentNode
+			} `graphql:"replies(last: 100, before: $cursor)"`
+		} `graphql:"... on DiscussionComment"`
+	} `graphql:"node(id: $id)"`
 }
 
 func (c *DiscussionChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
@@ -69,20 +95,38 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 
 	switch cond {
 	case "commented":
-		var q discussionCommentsQuery
-		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
-			return false, "", skipNotFound(err)
-		}
 		since := r.SinceTime()
-		for _, comment := range q.Repository.Discussion.Comments.Nodes {
-			if matched, _ := c.matchComment(comment.discussionCommentNode, since, skipUserFilter, r); matched {
-				return true, "", nil
+		var commentsCursor *githubv4.String
+		for {
+			variables["commentsCursor"] = commentsCursor
+			var q discussionCommentsQuery
+			if err := c.v4Client.Query(ctx, &q, variables); err != nil {
+				return false, "", skipNotFound(err)
 			}
-			for _, reply := range comment.Replies.Nodes {
-				if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
+			for _, comment := range q.Repository.Discussion.Comments.Nodes {
+				if matched, _ := c.matchComment(comment.discussionCommentNode, since, skipUserFilter, r); matched {
 					return true, "", nil
 				}
+				for _, reply := range comment.Replies.Nodes {
+					if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
+						return true, "", nil
+					}
+				}
+				if comment.Replies.PageInfo.HasPreviousPage {
+					matched, err := c.paginateReplies(ctx, comment.ID, comment.Replies.PageInfo.StartCursor, since, skipUserFilter, r)
+					if err != nil {
+						return false, "", err
+					}
+					if matched {
+						return true, "", nil
+					}
+				}
 			}
+			if !q.Repository.Discussion.Comments.PageInfo.HasPreviousPage {
+				break
+			}
+			cursor := q.Repository.Discussion.Comments.PageInfo.StartCursor
+			commentsCursor = &cursor
 		}
 		return false, "", nil
 	case "closed", "answered":
@@ -98,6 +142,31 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 		return true, "true", nil
 	}
 	return false, "", nil
+}
+
+func (c *DiscussionChecker) paginateReplies(ctx context.Context, commentID githubv4.ID, startCursor githubv4.String, since time.Time, skipUserFilter bool, r *rule.WatchRule) (bool, error) {
+	cursor := &startCursor
+	for {
+		variables := map[string]any{
+			"id":     commentID,
+			"cursor": (*githubv4.String)(cursor),
+		}
+		var q discussionCommentRepliesQuery
+		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
+			return false, skipNotFound(err)
+		}
+		for _, reply := range q.Node.DiscussionComment.Replies.Nodes {
+			if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
+				return true, nil
+			}
+		}
+		if !q.Node.DiscussionComment.Replies.PageInfo.HasPreviousPage {
+			break
+		}
+		next := q.Node.DiscussionComment.Replies.PageInfo.StartCursor
+		cursor = &next
+	}
+	return false, nil
 }
 
 func (c *DiscussionChecker) matchComment(node discussionCommentNode, since time.Time, skipUserFilter bool, r *rule.WatchRule) (bool, string) {

@@ -32,18 +32,8 @@ func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r
 	switch cond {
 	case "commented":
 		since := r.SinceTime()
-		comments, _, err := c.client.Issues.ListComments(ctx, owner, repo, r.Number,
-			&github.IssueListCommentsOptions{Since: &since})
-		if err != nil {
-			return false, "", skipNotFound(err)
-		}
-		for _, comment := range comments {
-			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
-				continue
-			}
-			return true, "", nil
-		}
-		return false, "", nil
+		matched, err := checkIssueCommented(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, since, skipUserFilter)
+		return matched, "", err
 	case "closed":
 		matched, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, skipUserFilter)
 		return matched, "true", err
