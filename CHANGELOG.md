@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.8.0](https://github.com/k1LoW/gh-wait/compare/v0.7.1...v0.8.0) - 2026-03-25
+### New Features 🎉
+- feat: add GitHub Discussion support by @k1LoW in https://github.com/k1LoW/gh-wait/pull/28
+### Other Changes
+- fix: add pagination to all checker API calls by @k1LoW in https://github.com/k1LoW/gh-wait/pull/30
+
 ## [v0.7.1](https://github.com/k1LoW/gh-wait/compare/v0.7.0...v0.7.1) - 2026-03-23
 ### Fix bug 🐛
 - fix: use previous LastCheckedAt for SinceTime() during condition checks by @k1LoW in https://github.com/k1LoW/gh-wait/pull/27
