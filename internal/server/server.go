@@ -385,7 +385,13 @@ func Run(ctx context.Context, addr string, port int) error {
 		slog.Warn("failed to get authenticated user, self-filtering disabled", "error", err)
 	}
 
-	v4Client := githubv4.NewClient(ghClient.Client())
+	_, _, _, v4ep := factory.GetTokenAndEndpoints()
+	var v4Client *githubv4.Client
+	if v4ep == "https://api.github.com/graphql" || v4ep == "" {
+		v4Client = githubv4.NewClient(ghClient.Client())
+	} else {
+		v4Client = githubv4.NewEnterpriseClient(v4ep, ghClient.Client())
+	}
 
 	checkers := map[string]checker.Checker{
 		"pr":         checker.NewPRChecker(ghClient, currentUser),

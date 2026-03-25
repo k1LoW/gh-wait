@@ -22,9 +22,6 @@ type discussionQuery struct {
 		Discussion struct {
 			Closed     bool
 			IsAnswered bool
-			Author     struct {
-				Login string
-			}
 		} `graphql:"discussion(number: $number)"`
 	} `graphql:"repository(owner: $owner, name: $repo)"`
 }
