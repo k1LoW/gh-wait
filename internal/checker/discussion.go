@@ -155,12 +155,20 @@ func (c *DiscussionChecker) paginateReplies(ctx context.Context, commentID githu
 		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
 			return false, skipNotFound(err)
 		}
+		allBeforeSince := true
 		for _, reply := range q.Node.DiscussionComment.Replies.Nodes {
+			if reply.CreatedAt.After(since) {
+				allBeforeSince = false
+			}
 			if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
 				return true, nil
 			}
 		}
 		if !q.Node.DiscussionComment.Replies.PageInfo.HasPreviousPage {
+			break
+		}
+		// Replies are chronologically ordered; older pages only have older replies.
+		if allBeforeSince && len(q.Node.DiscussionComment.Replies.Nodes) > 0 {
 			break
 		}
 		next := q.Node.DiscussionComment.Replies.PageInfo.StartCursor
