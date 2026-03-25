@@ -25,6 +25,9 @@ func TestParseGitHubURL(t *testing.T) {
 		{"Workflow run URL", "https://github.com/owner/repo/actions/runs/23424874935", "workflow", "owner/repo", 23424874935, "https://github.com/owner/repo/actions/runs/23424874935", true},
 		{"Workflow run URL with trailing slash", "https://github.com/owner/repo/actions/runs/12345/", "workflow", "owner/repo", 12345, "https://github.com/owner/repo/actions/runs/12345", true},
 		{"GHE workflow run URL", "https://ghe.example.com/org/project/actions/runs/99999", "workflow", "org/project", 99999, "https://ghe.example.com/org/project/actions/runs/99999", true},
+		{"Discussion URL", "https://github.com/owner/repo/discussions/7", "discussion", "owner/repo", 7, "https://github.com/owner/repo/discussions/7", true},
+		{"Discussion URL with trailing slash", "https://github.com/owner/repo/discussions/7/", "discussion", "owner/repo", 7, "https://github.com/owner/repo/discussions/7", true},
+		{"GHE discussion URL", "https://ghe.example.com/org/project/discussions/3", "discussion", "org/project", 3, "https://ghe.example.com/org/project/discussions/3", true},
 		{"Unknown kind", "https://github.com/owner/repo/actions/123", "", "", 0, "", false},
 		{"Zero number", "https://github.com/owner/repo/pull/0", "", "", 0, "", false},
 	}
@@ -88,6 +91,12 @@ func TestTransformURLArgs(t *testing.T) {
 			"Workflow run URL with flags",
 			[]string{"https://github.com/owner/repo/actions/runs/23424874935", "--failed", "--open"},
 			[]string{"workflow", "23424874935", "--repo", "owner/repo", "--url", "https://github.com/owner/repo/actions/runs/23424874935", "--failed", "--open"},
+			true,
+		},
+		{
+			"Discussion URL with flags",
+			[]string{"https://github.com/owner/repo/discussions/7", "--answered", "--open"},
+			[]string{"discussion", "7", "--repo", "owner/repo", "--url", "https://github.com/owner/repo/discussions/7", "--answered", "--open"},
 			true,
 		},
 		{

@@ -81,9 +81,14 @@ func buildWatchURL(cmd *cobra.Command, ruleType, repo string, number int) string
 	if ruleType == "workflow" {
 		return fmt.Sprintf("https://github.com/%s/%s/actions/runs/%d", owner, repoName, number)
 	}
-	pathSegment := "pull"
-	if ruleType == "issue" {
+	var pathSegment string
+	switch ruleType {
+	case "pr":
+		pathSegment = "pull"
+	case "issue":
 		pathSegment = "issues"
+	case "discussion":
+		pathSegment = "discussions"
 	}
 	return fmt.Sprintf("https://github.com/%s/%s/%s/%d", owner, repoName, pathSegment, number)
 }
@@ -144,6 +149,8 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 		typeLabel = "PR"
 	case "issue":
 		typeLabel = "Issue"
+	case "discussion":
+		typeLabel = "Discussion"
 	case "workflow":
 		typeLabel = "Workflow run"
 	}

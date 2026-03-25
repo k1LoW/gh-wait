@@ -1,12 +1,12 @@
 # gh-wait
 
-`gh-wait` is a GitHub CLI (`gh`) extension that watches pull requests, issues, and workflow runs for specific conditions, then takes action when they are met.
+`gh-wait` is a GitHub CLI (`gh`) extension that watches pull requests, issues, discussions, and workflow runs for specific conditions, then takes action when they are met.
 
-It runs a lightweight background server that polls the GitHub API and can open your browser or notify you when conditions like approval, merge, CI completion, workflow completion, or new comments are detected.
+It runs a lightweight background server that polls the GitHub API and can open your browser or notify you when conditions like approval, merge, CI completion, workflow completion, new comments, or discussion answers are detected.
 
 ## Usage
 
-You can pass a GitHub URL directly — `gh-wait` auto-detects whether it is a PR, an issue, or a workflow run:
+You can pass a GitHub URL directly — `gh-wait` auto-detects whether it is a PR, an issue, a discussion, or a workflow run:
 
 ```bash
 # Watch a PR by URL
@@ -14,6 +14,9 @@ $ gh wait https://github.com/owner/repo/pull/123 --approved --open
 
 # Watch an issue by URL
 $ gh wait https://github.com/owner/repo/issues/456 --commented --open
+
+# Watch a discussion by URL
+$ gh wait https://github.com/owner/repo/discussions/7 --answered --open
 
 # Watch a workflow run by URL
 $ gh wait https://github.com/owner/repo/actions/runs/23424874935
@@ -33,6 +36,9 @@ $ gh wait pr 123 --ci-completed --open
 
 # Watch for new comments on an issue
 $ gh wait issue 456 --commented --open
+
+# Watch a discussion for answer
+$ gh wait discussion 7 --answered --open --repo owner/repo
 
 # Watch a workflow run for completion
 $ gh wait workflow 23424874935 --repo owner/repo
@@ -134,6 +140,14 @@ abc12345  https://github.com/k1LoW/gh-wait/pull/2    approved    merged  1/3    
 | Commented | `--commented` | New comments added |
 | Closed | `--closed` | Issue has been closed |
 
+### Discussion
+
+| Condition | Flag | Description |
+|-----------|------|-------------|
+| Commented | `--commented` | New comments added |
+| Closed | `--closed` | Discussion has been closed |
+| Answered | `--answered` | Discussion has been marked as answered |
+
 ### Workflow Run
 
 | Condition | Flag | Description |
@@ -176,6 +190,20 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--repo` | Select another repository using the `OWNER/REPO` format |
 | `--commented` | Watch for new comments |
 | `--closed` | Watch for close |
+| `--open` | Open in browser when condition is met |
+| `--until` | Termination condition (can be specified multiple times) |
+| `--count` | Maximum number of triggers (0 = unlimited) |
+| `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
+
+### `gh wait discussion <number>`
+
+| Option | Description |
+|--------|-------------|
+| `--repo` | Select another repository using the `OWNER/REPO` format |
+| `--commented` | Watch for new comments |
+| `--closed` | Watch for close |
+| `--answered` | Watch for answer |
 | `--open` | Open in browser when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |

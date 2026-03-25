@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/go-github/v83/github"
 	"github.com/k1LoW/gh-wait/internal/rule"
@@ -215,5 +216,17 @@ func skipNotFound(err error) error {
 	if errors.As(err, &errResp) && errResp.Response.StatusCode == http.StatusNotFound {
 		return nil
 	}
+	// GraphQL "NOT_FOUND" or "Could not resolve" errors from shurcooL/githubv4
+	if isGraphQLNotFound(err) {
+		return nil
+	}
 	return err
+}
+
+func isGraphQLNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Could not resolve") || strings.Contains(msg, "NOT_FOUND")
 }

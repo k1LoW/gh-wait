@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/k1LoW/donegroup"
-	factory "github.com/k1LoW/go-github-client/v83/factory"
 	"github.com/k1LoW/gh-wait/internal/action"
 	"github.com/k1LoW/gh-wait/internal/checker"
 	"github.com/k1LoW/gh-wait/internal/rule"
 	"github.com/k1LoW/gh-wait/version"
+	factory "github.com/k1LoW/go-github-client/v83/factory"
+	"github.com/shurcooL/githubv4"
 )
 
 const (
@@ -302,14 +303,14 @@ func handleStatus(state *State) http.HandlerFunc {
 			}
 		}
 		resp := struct {
-			Version      string `json:"version"`
-			PID          int    `json:"pid"`
-			RuleCount    int    `json:"rule_count"`
-			WatchingCount int   `json:"watching_count"`
+			Version       string `json:"version"`
+			PID           int    `json:"pid"`
+			RuleCount     int    `json:"rule_count"`
+			WatchingCount int    `json:"watching_count"`
 		}{
-			Version:      version.Version,
-			PID:          os.Getpid(),
-			RuleCount:    len(rules),
+			Version:       version.Version,
+			PID:           os.Getpid(),
+			RuleCount:     len(rules),
 			WatchingCount: watchingCount,
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -384,10 +385,19 @@ func Run(ctx context.Context, addr string, port int) error {
 		slog.Warn("failed to get authenticated user, self-filtering disabled", "error", err)
 	}
 
+	_, _, _, v4ep := factory.GetTokenAndEndpoints()
+	var v4Client *githubv4.Client
+	if v4ep == "https://api.github.com/graphql" || v4ep == "" {
+		v4Client = githubv4.NewClient(ghClient.Client())
+	} else {
+		v4Client = githubv4.NewEnterpriseClient(v4ep, ghClient.Client())
+	}
+
 	checkers := map[string]checker.Checker{
-		"pr":       checker.NewPRChecker(ghClient, currentUser),
-		"issue":    checker.NewIssueChecker(ghClient, currentUser),
-		"workflow": checker.NewWorkflowChecker(ghClient, currentUser),
+		"pr":         checker.NewPRChecker(ghClient, currentUser),
+		"issue":      checker.NewIssueChecker(ghClient, currentUser),
+		"workflow":   checker.NewWorkflowChecker(ghClient, currentUser),
+		"discussion": checker.NewDiscussionChecker(v4Client, currentUser),
 	}
 	openAction := &action.OpenBrowserAction{}
 
