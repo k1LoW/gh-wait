@@ -564,6 +564,29 @@ func TestCheckRulesNotifyAction(t *testing.T) {
 	}
 }
 
+func TestCheckRulesMultipleActions(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Actions: []string{"open", "notify"}, Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
+
+	mc := &mockChecker{result: true}
+	openMock := &mockAction{}
+	notifyMock := &mockAction{}
+	actions := map[string]action.Action{"open": openMock, "notify": notifyMock}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, actions)
+
+	if len(openMock.executed) != 1 || openMock.executed[0] != "r1" {
+		t.Errorf("expected open action executed for r1, got %v", openMock.executed)
+	}
+	if len(notifyMock.executed) != 1 || notifyMock.executed[0] != "r1" {
+		t.Errorf("expected notify action executed for r1, got %v", notifyMock.executed)
+	}
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed after trigger")
+	}
+}
+
 func TestCheckRulesMultipleTypes(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{ID: "pr1", Type: "pr", Actions: []string{"open"}, Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})

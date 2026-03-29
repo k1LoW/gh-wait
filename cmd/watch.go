@@ -162,7 +162,7 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 	}
 	actionSuffix := ""
 	if len(actions) > 0 {
-		actionSuffix = fmt.Sprintf(" (action: %s)", strings.Join(actions, ", "))
+		actionSuffix = fmt.Sprintf(" (actions: %s)", strings.Join(actions, ", "))
 	}
 	if ruleType == "workflow" {
 		fmt.Printf("Watching %s %d on %s for: %s%s\n", typeLabel, number, repo, strings.Join(conditions, ", "), actionSuffix)
