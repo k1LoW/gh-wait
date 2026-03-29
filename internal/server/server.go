@@ -399,7 +399,11 @@ func Run(ctx context.Context, addr string, port int) error {
 		"workflow":   checker.NewWorkflowChecker(ghClient, currentUser),
 		"discussion": checker.NewDiscussionChecker(v4Client, currentUser),
 	}
-	openAction := &action.OpenBrowserAction{}
+	actions := map[string]action.Action{
+		"log":    &action.LogAction{},
+		"open":   &action.OpenBrowserAction{},
+		"notify": &action.NotifyAction{},
+	}
 
 	handler := NewHandler(state)
 	srv := &http.Server{
@@ -419,7 +423,7 @@ func Run(ctx context.Context, addr string, port int) error {
 
 	// Polling loop
 	donegroup.Go(ctx, func() error {
-		pollLoop(ctx, state, checkers, openAction)
+		pollLoop(ctx, state, checkers, actions)
 		return nil
 	})
 
@@ -454,7 +458,7 @@ func Run(ctx context.Context, addr string, port int) error {
 	return nil
 }
 
-func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Checker, act action.Action) {
+func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Checker, act map[string]action.Action) {
 	ticker := time.NewTicker(pollTick)
 	defer ticker.Stop()
 
@@ -468,7 +472,7 @@ func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Che
 	}
 }
 
-func CheckRules(ctx context.Context, state *State, checkers map[string]checker.Checker, act action.Action) {
+func CheckRules(ctx context.Context, state *State, checkers map[string]checker.Checker, act map[string]action.Action) {
 	rules := state.WatchingRules()
 	now := time.Now()
 	for _, r := range rules {
@@ -562,10 +566,19 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 	}
 }
 
-func executeAction(act action.Action, r *rule.WatchRule) {
-	if r.Action == "open" {
-		if err := act.Execute(r); err != nil {
-			slog.Error("action failed", "rule_id", r.ID, "error", err)
+func executeAction(actions map[string]action.Action, r *rule.WatchRule) {
+	if len(r.Actions) == 0 {
+		slog.Warn("rule has no actions configured", "rule_id", r.ID)
+		return
+	}
+	for _, name := range r.Actions {
+		a, ok := actions[name]
+		if !ok {
+			slog.Warn("unknown action", "rule_id", r.ID, "action", name)
+			continue
+		}
+		if err := a.Execute(r); err != nil {
+			slog.Error("action failed", "rule_id", r.ID, "action", name, "error", err)
 		}
 	}
 }

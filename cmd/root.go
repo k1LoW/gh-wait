@@ -34,7 +34,7 @@ var rootCmd = &cobra.Command{
 	Long: `gh-wait is a GitHub CLI extension that watches pull requests, issues,
 discussions, and workflow runs for specific conditions (approvals, merges,
 CI completion, comments, answers, workflow completion, etc.) and triggers
-actions (desktop notification, open in browser) when those conditions are met.
+actions (server log, OS notification, open in browser) when those conditions are met.
 
 You can pass a GitHub URL directly instead of using subcommands —
 gh-wait will auto-detect the type:
