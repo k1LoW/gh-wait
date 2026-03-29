@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -137,6 +138,9 @@ func TestClone(t *testing.T) {
 			!cp.CreatedAt.Equal(original.CreatedAt) || !cp.LastCheckedAt.Equal(original.LastCheckedAt) ||
 			!cp.LastTriggeredAt.Equal(original.LastTriggeredAt) {
 			t.Error("scalar fields do not match")
+		}
+		if !slices.Equal(cp.Actions, original.Actions) {
+			t.Errorf("Actions do not match: got %v, want %v", cp.Actions, original.Actions)
 		}
 	})
 
