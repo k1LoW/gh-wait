@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -19,7 +20,7 @@ type WatchRule struct {
 	Repo          string    `json:"repo"`                    // "owner/repo"
 	Number        int       `json:"number"`
 	Conditions    []string  `json:"conditions"`              // OR evaluation
-	Action        string    `json:"action"`                  // "open", "notify"
+	Actions       []string  `json:"actions,omitempty"`        // e.g. ["open"], ["notify"], ["open","notify"]
 	URL           string    `json:"url"`
 	CreatedAt     time.Time `json:"created_at"`
 	Status        string    `json:"status"`                  // "watching", "triggered", "stopped"
@@ -61,7 +62,7 @@ func (r *WatchRule) Clone() *WatchRule {
 		Type:            r.Type,
 		Repo:            r.Repo,
 		Number:          r.Number,
-		Action:          r.Action,
+		Actions:         slices.Clone(r.Actions),
 		URL:             r.URL,
 		CreatedAt:       r.CreatedAt,
 		Status:          r.Status,
@@ -95,6 +96,14 @@ func (r *WatchRule) Clone() *WatchRule {
 		cp.ignoreUsersOnce.Do(func() {})
 	}
 	return cp
+}
+
+// Label returns a human-readable short description of the rule target.
+func (r *WatchRule) Label() string {
+	if r.Type == "workflow" {
+		return fmt.Sprintf("%s %s %d", r.Type, r.Repo, r.Number)
+	}
+	return fmt.Sprintf("%s %s#%d", r.Type, r.Repo, r.Number)
 }
 
 func GenerateID(typ, repo string, number int, conditions, until []string, maxCount int, ignoreUsers []string) string {

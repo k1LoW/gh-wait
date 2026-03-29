@@ -17,6 +17,7 @@ func registerWatchFlags(cmd *cobra.Command) {
 	cmd.Flags().String("repo", "", "Repository (owner/repo)")
 	cmd.Flags().String("url", "", "Override URL for the watch rule")
 	cmd.Flags().Bool("open", false, "Open in browser when condition is met")
+	cmd.Flags().Bool("notify", false, "Send OS notification when condition is met")
 	cmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed, merged). Can be specified multiple times")
 	cmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
 	cmd.Flags().StringSlice("ignore-user", nil, "Regex pattern of users to ignore (can be specified multiple times)")
@@ -40,7 +41,7 @@ func resolveRepo(cmd *cobra.Command) (string, error) {
 }
 
 // parseWatchFlags reads and validates the common watch flags from the command.
-func parseWatchFlags(cmd *cobra.Command, conditionFlags []string) (conditions []string, until []string, count int, ignoreUsers []string, interval, action string, err error) {
+func parseWatchFlags(cmd *cobra.Command, conditionFlags []string) (conditions []string, until []string, count int, ignoreUsers []string, interval string, actions []string, err error) {
 	for _, flag := range conditionFlags {
 		if v, _ := cmd.Flags().GetBool(flag); v {
 			conditions = append(conditions, flag)
@@ -53,21 +54,23 @@ func parseWatchFlags(cmd *cobra.Command, conditionFlags []string) (conditions []
 	ignoreUsers, _ = cmd.Flags().GetStringSlice("ignore-user")
 	for _, pattern := range ignoreUsers {
 		if _, compileErr := regexp.Compile(pattern); compileErr != nil {
-			return nil, nil, 0, nil, "", "", fmt.Errorf("invalid --ignore-user pattern %q: %w", pattern, compileErr)
+			return nil, nil, 0, nil, "", nil, fmt.Errorf("invalid --ignore-user pattern %q: %w", pattern, compileErr)
 		}
 	}
 
 	interval, _ = cmd.Flags().GetString("interval")
 	if _, parseErr := duration.Parse(interval); parseErr != nil {
-		return nil, nil, 0, nil, "", "", fmt.Errorf("invalid interval %q: %w", interval, parseErr)
+		return nil, nil, 0, nil, "", nil, fmt.Errorf("invalid interval %q: %w", interval, parseErr)
 	}
 
-	action = "notify"
 	if v, _ := cmd.Flags().GetBool("open"); v {
-		action = "open"
+		actions = append(actions, "open")
+	}
+	if v, _ := cmd.Flags().GetBool("notify"); v {
+		actions = append(actions, "notify")
 	}
 
-	return conditions, until, count, ignoreUsers, interval, action, nil
+	return conditions, until, count, ignoreUsers, interval, actions, nil
 }
 
 // buildWatchURL returns the URL for a watch rule. If --url is set (e.g. from
@@ -101,7 +104,7 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 		return err
 	}
 
-	conditions, until, count, ignoreUsers, interval, action, err := parseWatchFlags(cmd, conditionFlags)
+	conditions, until, count, ignoreUsers, interval, actions, err := parseWatchFlags(cmd, conditionFlags)
 	if err != nil {
 		return err
 	}
@@ -124,7 +127,7 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 		Repo:        repo,
 		Number:      number,
 		Conditions:  conditions,
-		Action:      action,
+		Actions:     actions,
 		URL:         url,
 		CreatedAt:   time.Now(),
 		Status:      "watching",
@@ -154,10 +157,14 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 	case "workflow":
 		typeLabel = "Workflow run"
 	}
+	actionSuffix := ""
+	if len(actions) > 0 {
+		actionSuffix = fmt.Sprintf(" (action: %s)", strings.Join(actions, ", "))
+	}
 	if ruleType == "workflow" {
-		fmt.Printf("Watching %s %d on %s for: %s (action: %s)\n", typeLabel, number, repo, strings.Join(conditions, ", "), action)
+		fmt.Printf("Watching %s %d on %s for: %s%s\n", typeLabel, number, repo, strings.Join(conditions, ", "), actionSuffix)
 	} else {
-		fmt.Printf("Watching %s #%d on %s for: %s (action: %s)\n", typeLabel, number, repo, strings.Join(conditions, ", "), action)
+		fmt.Printf("Watching %s #%d on %s for: %s%s\n", typeLabel, number, repo, strings.Join(conditions, ", "), actionSuffix)
 	}
 	return nil
 }

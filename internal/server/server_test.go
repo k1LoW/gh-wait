@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/k1LoW/gh-wait/internal/action"
 	"github.com/k1LoW/gh-wait/internal/checker"
 	"github.com/k1LoW/gh-wait/internal/rule"
 )
@@ -30,15 +31,15 @@ func TestStateAddAndListRules(t *testing.T) {
 
 func TestStateDeduplication(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "abc", Type: "pr", Action: "notify", Status: "watching"})
-	s.AddRule(&rule.WatchRule{ID: "abc", Type: "pr", Action: "open", Status: "watching"})
+	s.AddRule(&rule.WatchRule{ID: "abc", Type: "pr", Actions: []string{"notify"}, Status: "watching"})
+	s.AddRule(&rule.WatchRule{ID: "abc", Type: "pr", Actions: []string{"open"}, Status: "watching"})
 
 	rules := s.Rules()
 	if len(rules) != 1 {
 		t.Fatalf("expected 1 rule after dedup, got %d", len(rules))
 	}
-	if rules[0].Action != "open" {
-		t.Errorf("expected updated action 'open', got %s", rules[0].Action)
+	if len(rules[0].Actions) != 1 || rules[0].Actions[0] != "open" {
+		t.Errorf("expected updated actions [open], got %v", rules[0].Actions)
 	}
 }
 
@@ -346,7 +347,7 @@ func TestCheckRulesFirstCheckSetsSeeding(t *testing.T) {
 	// LastCheckedAt is zero → first check → Seeding should be set.
 	// Use Until to make it a continuous rule so it isn't removed after trigger.
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions: []string{"commented"},
 		Until:      []string{"closed"},
 		Interval:   "0s",
@@ -359,9 +360,10 @@ func TestCheckRulesFirstCheckSetsSeeding(t *testing.T) {
 		capturedSeeding: &seedingDuringCheck,
 	}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if !seedingDuringCheck {
 		t.Error("expected Seeding=true during first check")
@@ -381,7 +383,7 @@ func TestCheckRulesFirstCheckSetsSeeding(t *testing.T) {
 
 	// Second check: Seeding should be false
 	seedingDuringCheck = false
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 	if seedingDuringCheck {
 		t.Error("expected Seeding=false on second check")
 	}
@@ -390,7 +392,7 @@ func TestCheckRulesFirstCheckSetsSeeding(t *testing.T) {
 func TestCheckRulesFirstCheckErrorRetriesSeeding(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions: []string{"approved"},
 		Interval:   "0s",
 	})
@@ -398,9 +400,10 @@ func TestCheckRulesFirstCheckErrorRetriesSeeding(t *testing.T) {
 	// First check errors → LastCheckedAt should be reverted to zero
 	mc := &mockChecker{result: false, err: fmt.Errorf("api error")}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	rules := s.Rules()
 	if len(rules) != 1 {
@@ -417,7 +420,7 @@ func TestCheckRulesFirstCheckErrorRetriesSeeding(t *testing.T) {
 		capturedSeeding: &seedingDuringCheck,
 	}
 	checkers["pr"] = mc2
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if !seedingDuringCheck {
 		t.Error("expected Seeding=true on retry after previous error")
@@ -428,7 +431,7 @@ func TestCheckRulesSinceTimePreserved(t *testing.T) {
 	prevChecked := time.Now().Add(-time.Minute)
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions:    []string{"commented"},
 		Until:         []string{"closed"},
 		Interval:      "0s",
@@ -441,9 +444,10 @@ func TestCheckRulesSinceTimePreserved(t *testing.T) {
 		capturedSince: &capturedSince,
 	}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	// The checker should see the previous LastCheckedAt via SinceTime(),
 	// not the current time.
@@ -465,17 +469,18 @@ func TestCheckRulesFirstCheckSeedingUntilOnly(t *testing.T) {
 	s := NewState(0)
 	// Until-only rule with LastCheckedAt zero → first check
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Until:    []string{"closed"},
 		Interval: "0s",
 	})
 
 	mc := &mockChecker{conditionResult: map[string]bool{"closed": true}}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
 	// First check: until matches but should be seeded, not triggered
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if len(ma.executed) != 0 {
 		t.Errorf("expected no action on first check (seeding until), got %v", ma.executed)
@@ -485,7 +490,7 @@ func TestCheckRulesFirstCheckSeedingUntilOnly(t *testing.T) {
 	}
 
 	// Second check: until condition still matches → should trigger
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 	if len(ma.executed) != 1 {
 		t.Errorf("expected action on second check, got %v", ma.executed)
 	}
@@ -496,13 +501,14 @@ func TestCheckRulesFirstCheckSeedingUntilOnly(t *testing.T) {
 
 func TestCheckRulesMatched(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	mc := &mockChecker{result: true}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if len(ma.executed) != 1 || ma.executed[0] != "r1" {
 		t.Errorf("expected action executed for r1, got %v", ma.executed)
@@ -514,13 +520,14 @@ func TestCheckRulesMatched(t *testing.T) {
 
 func TestCheckRulesNotMatched(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	mc := &mockChecker{result: false}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if len(ma.executed) != 0 {
 		t.Error("expected no action")
@@ -536,19 +543,22 @@ func TestCheckRulesNotMatched(t *testing.T) {
 
 func TestCheckRulesNotifyAction(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Action: "notify", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
+	s.AddRule(&rule.WatchRule{ID: "r1", Type: "pr", Actions: []string{"notify"}, Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	mc := &mockChecker{result: true}
-	ma := &mockAction{}
+	openMock := &mockAction{}
+	notifyMock := &mockAction{}
+	actions := map[string]action.Action{"open": openMock, "notify": notifyMock}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
-	// Action should not be executed for "notify" (browser open is only for "open")
-	if len(ma.executed) != 0 {
-		t.Error("expected no browser action for notify")
+	if len(openMock.executed) != 0 {
+		t.Error("expected no browser action for notify-only rule")
 	}
-	// But rule should still be removed
+	if len(notifyMock.executed) != 1 || notifyMock.executed[0] != "r1" {
+		t.Errorf("expected notify action executed for r1, got %v", notifyMock.executed)
+	}
 	if len(s.Rules()) != 0 {
 		t.Error("expected rule to be removed after trigger")
 	}
@@ -556,15 +566,16 @@ func TestCheckRulesNotifyAction(t *testing.T) {
 
 func TestCheckRulesMultipleTypes(t *testing.T) {
 	s := NewState(0)
-	s.AddRule(&rule.WatchRule{ID: "pr1", Type: "pr", Action: "open", Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
-	s.AddRule(&rule.WatchRule{ID: "issue1", Type: "issue", Action: "open", Status: "watching", Conditions: []string{"closed"}, LastCheckedAt: time.Now().Add(-time.Minute)})
+	s.AddRule(&rule.WatchRule{ID: "pr1", Type: "pr", Actions: []string{"open"}, Status: "watching", Conditions: []string{"approved"}, LastCheckedAt: time.Now().Add(-time.Minute)})
+	s.AddRule(&rule.WatchRule{ID: "issue1", Type: "issue", Actions: []string{"open"}, Status: "watching", Conditions: []string{"closed"}, LastCheckedAt: time.Now().Add(-time.Minute)})
 
 	prMock := &mockChecker{result: true}
 	issueMock := &mockChecker{result: false}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": prMock, "issue": issueMock}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if len(ma.executed) != 1 || ma.executed[0] != "pr1" {
 		t.Errorf("expected only pr1 action, got %v", ma.executed)
@@ -580,7 +591,7 @@ func TestCheckRulesMultipleTypes(t *testing.T) {
 func TestCheckRulesContinuousWithUntil(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions:    []string{"commented"},
 		Until:         []string{"closed"},
 		LastCheckedAt: time.Now().Add(-time.Minute),
@@ -589,9 +600,10 @@ func TestCheckRulesContinuousWithUntil(t *testing.T) {
 	// commented matches, closed does not
 	mc := &mockChecker{conditionResult: map[string]bool{"commented": true, "closed": false}}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if len(ma.executed) != 1 {
 		t.Fatalf("expected action executed, got %v", ma.executed)
@@ -615,7 +627,7 @@ func TestCheckRulesContinuousWithUntil(t *testing.T) {
 func TestCheckRulesUntilMatched(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions:    []string{"commented"},
 		Until:         []string{"closed"},
 		LastCheckedAt: time.Now().Add(-time.Minute),
@@ -624,9 +636,10 @@ func TestCheckRulesUntilMatched(t *testing.T) {
 	// closed matches → rule should be removed without executing action
 	mc := &mockChecker{conditionResult: map[string]bool{"commented": true, "closed": true}}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	// No action for conditions (until takes precedence)
 	if len(ma.executed) != 0 {
@@ -640,7 +653,7 @@ func TestCheckRulesUntilMatched(t *testing.T) {
 func TestCheckRulesUntilOnlyMode(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions:    nil,
 		Until:         []string{"closed"},
 		LastCheckedAt: time.Now().Add(-time.Minute),
@@ -649,9 +662,10 @@ func TestCheckRulesUntilOnlyMode(t *testing.T) {
 	// closed matches → should execute action and remove rule
 	mc := &mockChecker{conditionResult: map[string]bool{"closed": true}}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if len(ma.executed) != 1 {
 		t.Errorf("expected action executed in until-only mode, got %v", ma.executed)
@@ -664,7 +678,7 @@ func TestCheckRulesUntilOnlyMode(t *testing.T) {
 func TestCheckRulesMaxCount(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions:    []string{"commented"},
 		MaxCount:      2,
 		TriggerCount:  0,
@@ -674,10 +688,11 @@ func TestCheckRulesMaxCount(t *testing.T) {
 
 	mc := &mockChecker{conditionResult: map[string]bool{"commented": true}}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
 	// First trigger
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 	rules := s.Rules()
 	if len(rules) != 1 {
 		t.Fatal("expected rule to remain after first trigger")
@@ -688,7 +703,7 @@ func TestCheckRulesMaxCount(t *testing.T) {
 
 	// Second trigger → should be removed
 	ma.executed = nil
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 	if len(ma.executed) != 1 {
 		t.Errorf("expected action on second trigger, got %v", ma.executed)
 	}
@@ -700,7 +715,7 @@ func TestCheckRulesMaxCount(t *testing.T) {
 func TestCheckRulesMaxCountWithUntil(t *testing.T) {
 	s := NewState(0)
 	s.AddRule(&rule.WatchRule{
-		ID: "r1", Type: "pr", Action: "open", Status: "watching",
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
 		Conditions:    []string{"commented"},
 		Until:         []string{"merged"},
 		MaxCount:      3,
@@ -711,9 +726,10 @@ func TestCheckRulesMaxCountWithUntil(t *testing.T) {
 	// commented matches, merged does not → third trigger reaches MaxCount
 	mc := &mockChecker{conditionResult: map[string]bool{"commented": true, "merged": false}}
 	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
 	checkers := map[string]checker.Checker{"pr": mc}
 
-	CheckRules(context.Background(), s, checkers, ma)
+	CheckRules(context.Background(), s, checkers, actions)
 
 	if len(ma.executed) != 1 {
 		t.Errorf("expected action executed, got %v", ma.executed)

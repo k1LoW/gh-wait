@@ -77,7 +77,7 @@ The server must be running for this command to work.`,
 			}
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				r.ID, r.URL,
-				strings.Join(r.Conditions, ","), untilStr, countStr, intervalStr, r.Action, r.Status, lastTriggeredStr)
+				strings.Join(r.Conditions, ","), untilStr, countStr, intervalStr, strings.Join(r.Actions, ","), r.Status, lastTriggeredStr)
 		}
 		return w.Flush()
 	},

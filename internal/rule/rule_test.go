@@ -113,7 +113,7 @@ func TestClone(t *testing.T) {
 		Repo:            "owner/repo",
 		Number:          42,
 		Conditions:      []string{"approved", "merged"},
-		Action:          "open",
+		Actions:         []string{"open"},
 		URL:             "https://github.com/owner/repo/pull/42",
 		CreatedAt:       time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		Status:          "watching",
@@ -131,7 +131,7 @@ func TestClone(t *testing.T) {
 
 	t.Run("scalar fields match", func(t *testing.T) {
 		if cp.ID != original.ID || cp.Type != original.Type || cp.Repo != original.Repo ||
-			cp.Number != original.Number || cp.Action != original.Action || cp.URL != original.URL ||
+			cp.Number != original.Number || cp.URL != original.URL ||
 			cp.Status != original.Status || cp.MaxCount != original.MaxCount ||
 			cp.TriggerCount != original.TriggerCount || cp.Interval != original.Interval ||
 			!cp.CreatedAt.Equal(original.CreatedAt) || !cp.LastCheckedAt.Equal(original.LastCheckedAt) ||
