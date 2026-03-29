@@ -567,6 +567,10 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 }
 
 func executeAction(actions map[string]action.Action, r *rule.WatchRule) {
+	if len(r.Actions) == 0 {
+		slog.Warn("rule has no actions configured", "rule_id", r.ID)
+		return
+	}
 	for _, name := range r.Actions {
 		a, ok := actions[name]
 		if !ok {
