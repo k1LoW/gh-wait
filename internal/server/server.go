@@ -400,6 +400,7 @@ func Run(ctx context.Context, addr string, port int) error {
 		"discussion": checker.NewDiscussionChecker(v4Client, currentUser),
 	}
 	actions := map[string]action.Action{
+		"log":    &action.LogAction{},
 		"open":   &action.OpenBrowserAction{},
 		"notify": &action.NotifyAction{},
 	}
@@ -569,6 +570,7 @@ func executeAction(actions map[string]action.Action, r *rule.WatchRule) {
 	for _, name := range r.Actions {
 		a, ok := actions[name]
 		if !ok {
+			slog.Warn("unknown action", "rule_id", r.ID, "action", name)
 			continue
 		}
 		if err := a.Execute(r); err != nil {

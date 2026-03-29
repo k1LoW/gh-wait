@@ -69,6 +69,9 @@ func parseWatchFlags(cmd *cobra.Command, conditionFlags []string) (conditions []
 	if v, _ := cmd.Flags().GetBool("notify"); v {
 		actions = append(actions, "notify")
 	}
+	if len(actions) == 0 {
+		actions = []string{"log"}
+	}
 
 	return conditions, until, count, ignoreUsers, interval, actions, nil
 }

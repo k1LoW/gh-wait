@@ -20,7 +20,7 @@ var listCmd = &cobra.Command{
 	Long: `List all watch rules registered on the gh-wait server.
 
 By default, output is a human-readable table with columns:
-  ID, URL, CONDITIONS, UNTIL, COUNT, INTERVAL, ACTION, STATUS, LAST_TRIGGERED_AT
+  ID, URL, CONDITIONS, UNTIL, COUNT, INTERVAL, ACTIONS, STATUS, LAST_TRIGGERED_AT
 
 Use --json to output the rules as a JSON array for programmatic use.
 
@@ -55,7 +55,7 @@ The server must be running for this command to work.`,
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tURL\tCONDITIONS\tUNTIL\tCOUNT\tINTERVAL\tACTION\tSTATUS\tLAST_TRIGGERED_AT")
+		fmt.Fprintln(w, "ID\tURL\tCONDITIONS\tUNTIL\tCOUNT\tINTERVAL\tACTIONS\tSTATUS\tLAST_TRIGGERED_AT")
 		for _, r := range rules {
 			untilStr := "-"
 			if len(r.Until) > 0 {

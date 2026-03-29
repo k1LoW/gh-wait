@@ -153,6 +153,10 @@ func TestClone(t *testing.T) {
 		if original.IgnoreUsers[0] == "changed" {
 			t.Error("mutating clone's IgnoreUsers affected original")
 		}
+		cp.Actions[0] = "changed"
+		if original.Actions[0] == "changed" {
+			t.Error("mutating clone's Actions affected original")
+		}
 	})
 
 	t.Run("map is a deep copy", func(t *testing.T) {
