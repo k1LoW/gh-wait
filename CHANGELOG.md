@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.9.0](https://github.com/k1LoW/gh-wait/compare/v0.8.0...v0.9.0) - 2026-03-29
+### New Features 🎉
+- feat: add --notify flag for OS notifications via beeep by @k1LoW in https://github.com/k1LoW/gh-wait/pull/31
+
 ## [v0.8.0](https://github.com/k1LoW/gh-wait/compare/v0.7.1...v0.8.0) - 2026-03-25
 ### New Features 🎉
 - feat: add GitHub Discussion support by @k1LoW in https://github.com/k1LoW/gh-wait/pull/28
