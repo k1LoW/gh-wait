@@ -26,8 +26,9 @@ Multiple conditions are evaluated with OR logic — the rule triggers when
 any one of the specified conditions is met.
 
 Actions:
-  By default, a desktop notification is sent. Use --open to instead open
-  the discussion in your default browser.
+  By default, the trigger is logged to the server log. Use --notify to send
+  an OS desktop notification, --open to open the discussion in your default
+  browser, or both together.
 
 Termination:
   By default, a rule triggers once and stops. Use --count to allow
