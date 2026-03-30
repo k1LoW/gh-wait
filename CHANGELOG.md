@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.9.3](https://github.com/k1LoW/gh-wait/compare/v0.9.2...v0.9.3) - 2026-03-30
+### Fix bug 🐛
+- fix: fire state-based conditions that were already true at seeding time by @k1LoW in https://github.com/k1LoW/gh-wait/pull/36
+
 ## [v0.9.2](https://github.com/k1LoW/gh-wait/compare/v0.9.1...v0.9.2) - 2026-03-30
 ### Fix bug 🐛
 - fix: execute action when conditions and until overlap by @k1LoW in https://github.com/k1LoW/gh-wait/pull/34
