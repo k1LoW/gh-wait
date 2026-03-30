@@ -519,8 +519,12 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			if untilMatched {
 				if !isFirstCheck {
 					slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-					if len(r.Conditions) == 0 {
-						// Until-only mode: execute action when until condition is met
+					if len(r.Conditions) == 0 || conditionsOverlapUntil(r.Conditions, r.Until) {
+						// Execute action when:
+						// - Until-only mode (no conditions), or
+						// - Conditions overlap with until (e.g., --merged --until merged),
+						//   because the transition-based condition check would miss the
+						//   state that was already present at seeding time.
 						executeAction(act, r)
 					}
 					state.MarkTriggered(r.ID)
@@ -564,6 +568,19 @@ func CheckRules(ctx context.Context, state *State, checkers map[string]checker.C
 			}
 		}
 	}
+}
+
+func conditionsOverlapUntil(conditions, until []string) bool {
+	m := make(map[string]struct{}, len(until))
+	for _, u := range until {
+		m[u] = struct{}{}
+	}
+	for _, c := range conditions {
+		if _, ok := m[c]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func executeAction(actions map[string]action.Action, r *rule.WatchRule) {
