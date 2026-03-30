@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.9.2](https://github.com/k1LoW/gh-wait/compare/v0.9.1...v0.9.2) - 2026-03-30
+### Fix bug 🐛
+- fix: execute action when conditions and until overlap by @k1LoW in https://github.com/k1LoW/gh-wait/pull/34
+
 ## [v0.9.1](https://github.com/k1LoW/gh-wait/compare/v0.9.0...v0.9.1) - 2026-03-30
 
 ## [v0.9.0](https://github.com/k1LoW/gh-wait/compare/v0.8.0...v0.9.0) - 2026-03-29
