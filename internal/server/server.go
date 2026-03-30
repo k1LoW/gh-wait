@@ -108,8 +108,8 @@ func (s *State) updateLastCheckedAt(id string, t time.Time) {
 	}
 }
 
-// syncFiredStates deep-copies FiredStates from a cloned rule back to the
-// original without triggering a backup.
+// syncFiredStates deep-copies FiredStates and SeededStates from a cloned
+// rule back to the original without triggering a backup.
 func (s *State) syncFiredStates(r *rule.WatchRule) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -121,6 +121,13 @@ func (s *State) syncFiredStates(r *rule.WatchRule) {
 				s.rules[i].FiredStates = cp
 			} else {
 				s.rules[i].FiredStates = nil
+			}
+			if r.SeededStates != nil {
+				cp := make(map[string]string, len(r.SeededStates))
+				maps.Copy(cp, r.SeededStates)
+				s.rules[i].SeededStates = cp
+			} else {
+				s.rules[i].SeededStates = nil
 			}
 			return
 		}

@@ -74,16 +74,25 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 	if stateKey == "" {
 		return true
 	}
+	// When seeding (first check), record state but don't trigger.
+	// This prevents pre-existing states from causing false triggers.
+	if r.Seeding {
+		r.RecordSeededState(cond, stateKey)
+		return false
+	}
+	// If this state was seeded with the same stateKey, fire once and
+	// clear the seeded record so subsequent checks with the same key
+	// are treated as already-fired.
+	if r.IsSeededState(cond, stateKey) {
+		r.ClearSeededState(cond)
+		r.RecordFiredState(cond, stateKey)
+		return true
+	}
 	// State-based: only trigger on transition (new stateKey)
 	if r.HasFiredForState(cond, stateKey) {
 		return false
 	}
 	r.RecordFiredState(cond, stateKey)
-	// When seeding (first check), record state but don't trigger.
-	// This prevents pre-existing states from causing false triggers.
-	if r.Seeding {
-		return false
-	}
 	return true
 }
 
