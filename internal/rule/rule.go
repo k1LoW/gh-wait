@@ -15,27 +15,28 @@ import (
 )
 
 type WatchRule struct {
-	ID            string    `json:"id"`
-	Type          string    `json:"type"`                    // "pr", "issue", "workflow"
-	Repo          string    `json:"repo"`                    // "owner/repo"
-	Number        int       `json:"number"`
-	Conditions    []string  `json:"conditions"`              // OR evaluation
-	Actions       []string  `json:"actions,omitempty"`        // e.g. ["open"], ["notify"], ["open","notify"]
-	URL           string    `json:"url"`
-	CreatedAt     time.Time `json:"created_at"`
-	Status        string    `json:"status"`                  // "watching", "triggered", "stopped"
-	Until         []string  `json:"until,omitempty"`         // termination conditions (any match ends the rule)
-	MaxCount      int       `json:"max_count,omitempty"`     // 0=unlimited, N=end after N triggers
-	TriggerCount  int       `json:"trigger_count"`           // current trigger count
-	LastCheckedAt   time.Time `json:"last_checked_at,omitzero"`
-	LastTriggeredAt time.Time `json:"last_triggered_at,omitzero"`
-	Interval      string            `json:"interval,omitempty"`      // polling interval (e.g., "30sec", "5min", "1h")
-	IgnoreUsers   []string          `json:"ignore_users,omitempty"`  // regex patterns of users to ignore
-	FiredStates   map[string]string `json:"fired_states,omitempty"`  // state-based condition dedup (condition -> stateKey)
+	ID              string            `json:"id"`
+	Type            string            `json:"type"` // "pr", "issue", "workflow"
+	Repo            string            `json:"repo"` // "owner/repo"
+	Number          int               `json:"number"`
+	Conditions      []string          `json:"conditions"`        // OR evaluation
+	Actions         []string          `json:"actions,omitempty"` // e.g. ["open"], ["notify"], ["open","notify"]
+	URL             string            `json:"url"`
+	CreatedAt       time.Time         `json:"created_at"`
+	Status          string            `json:"status"`              // "watching", "triggered", "stopped"
+	Until           []string          `json:"until,omitempty"`     // termination conditions (any match ends the rule)
+	MaxCount        int               `json:"max_count,omitempty"` // 0=unlimited, N=end after N triggers
+	TriggerCount    int               `json:"trigger_count"`       // current trigger count
+	LastCheckedAt   time.Time         `json:"last_checked_at,omitzero"`
+	LastTriggeredAt time.Time         `json:"last_triggered_at,omitzero"`
+	Interval        string            `json:"interval,omitempty"`      // polling interval (e.g., "30sec", "5min", "1h")
+	IgnoreUsers     []string          `json:"ignore_users,omitempty"`  // regex patterns of users to ignore
+	FiredStates     map[string]string `json:"fired_states,omitempty"`  // state-based condition dedup (condition -> stateKey)
+	SeededStates    map[string]string `json:"seeded_states,omitempty"` // states recorded during seeding (first check)
 
 	Seeding bool `json:"-"` // transient: when true, state-based conditions seed without triggering
 
-	ignoreUsersOnce    sync.Once        `json:"-"`
+	ignoreUsersOnce     sync.Once        `json:"-"`
 	compiledIgnoreUsers []*regexp.Regexp `json:"-"`
 }
 
@@ -88,6 +89,10 @@ func (r *WatchRule) Clone() *WatchRule {
 	if r.FiredStates != nil {
 		cp.FiredStates = make(map[string]string, len(r.FiredStates))
 		maps.Copy(cp.FiredStates, r.FiredStates)
+	}
+	if r.SeededStates != nil {
+		cp.SeededStates = make(map[string]string, len(r.SeededStates))
+		maps.Copy(cp.SeededStates, r.SeededStates)
 	}
 	// Share compiled regexps (read-only) if already populated.
 	// Avoid calling CompiledIgnoreUsers() here as it mutates the source rule.
@@ -171,6 +176,29 @@ func (r *WatchRule) RecordFiredState(condition, stateKey string) {
 func (r *WatchRule) ClearFiredState(condition string) {
 	if r.FiredStates != nil {
 		delete(r.FiredStates, condition)
+	}
+}
+
+// RecordSeededState records a state observed during seeding (first check).
+func (r *WatchRule) RecordSeededState(condition, stateKey string) {
+	if r.SeededStates == nil {
+		r.SeededStates = make(map[string]string)
+	}
+	r.SeededStates[condition] = stateKey
+}
+
+// IsSeededState returns true if the condition was seeded with the given stateKey.
+func (r *WatchRule) IsSeededState(condition, stateKey string) bool {
+	if r.SeededStates == nil {
+		return false
+	}
+	return r.SeededStates[condition] == stateKey
+}
+
+// ClearSeededState removes a condition from seeded states after it has been consumed.
+func (r *WatchRule) ClearSeededState(condition string) {
+	if r.SeededStates != nil {
+		delete(r.SeededStates, condition)
 	}
 }
 
