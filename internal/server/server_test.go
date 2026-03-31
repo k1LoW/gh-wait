@@ -284,27 +284,28 @@ func TestHandleShutdown(t *testing.T) {
 
 type mockChecker struct {
 	result          bool
+	selfFiltered    bool
 	err             error
 	conditionResult map[string]bool // per-condition results for CheckConditions
 }
 
-func (m *mockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+func (m *mockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, bool, error) {
 	return m.CheckConditions(ctx, r, r.Conditions)
 }
 
-func (m *mockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, conditions []string) (bool, error) {
+func (m *mockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, conditions []string) (bool, bool, error) {
 	if m.conditionResult == nil {
-		return m.result, m.err
+		return m.result, m.selfFiltered, m.err
 	}
 	for _, c := range conditions {
 		if m.conditionResult[c] {
-			return true, m.err
+			return true, m.selfFiltered, m.err
 		}
 	}
-	return false, m.err
+	return false, false, m.err
 }
 
-func (m *mockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (m *mockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return m.CheckConditions(ctx, r, conditions)
 }
 
@@ -315,21 +316,21 @@ type captureMockChecker struct {
 	capturedSince   *time.Time
 }
 
-func (m *captureMockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+func (m *captureMockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, bool, error) {
 	if m.capturedSeeding != nil {
 		*m.capturedSeeding = r.Seeding
 	}
 	if m.capturedSince != nil {
 		*m.capturedSince = r.SinceTime()
 	}
-	return m.result, nil
+	return m.result, false, nil
 }
 
-func (m *captureMockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, _ []string) (bool, error) {
-	return m.result, nil
+func (m *captureMockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, _ []string) (bool, bool, error) {
+	return m.result, false, nil
 }
 
-func (m *captureMockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (m *captureMockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return m.CheckConditions(ctx, r, conditions)
 }
 

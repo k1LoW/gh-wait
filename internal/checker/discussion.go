@@ -74,19 +74,19 @@ type discussionCommentRepliesQuery struct {
 	} `graphql:"node(id: $id)"`
 }
 
-func (c *DiscussionChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+func (c *DiscussionChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, bool, error) {
 	return c.CheckConditions(ctx, r, r.Conditions)
 }
 
-func (c *DiscussionChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (c *DiscussionChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return evalConditions(ctx, r, conditions, c.checkCondition, true)
 }
 
-func (c *DiscussionChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (c *DiscussionChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
-func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, error) {
+func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, error) {
 	variables := map[string]any{
 		"owner":  githubv4.String(owner),
 		"repo":   githubv4.String(repo),
@@ -96,33 +96,45 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 	switch cond {
 	case "commented":
 		since := r.SinceTime()
+		anySelfFiltered := false
 		var commentsCursor *githubv4.String
 		for {
 			variables["commentsCursor"] = commentsCursor
 			var q discussionCommentsQuery
 			if err := c.v4Client.Query(ctx, &q, variables); err != nil {
-				return false, "", skipNotFound(err)
+				return false, "", false, skipNotFound(err)
 			}
 			for _, comment := range q.Repository.Discussion.Comments.Nodes {
-				if matched, _ := c.matchComment(comment.discussionCommentNode, since, skipUserFilter, r); matched {
-					return true, "", nil
+				matched, _, selfFiltered := c.matchComment(comment.discussionCommentNode, since, skipUserFilter, r)
+				if matched && !selfFiltered {
+					return true, "", false, nil
+				}
+				if selfFiltered {
+					anySelfFiltered = true
 				}
 				hasReplyAfterSince := false
 				for _, reply := range comment.Replies.Nodes {
 					if reply.CreatedAt.After(since) {
 						hasReplyAfterSince = true
 					}
-					if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
-						return true, "", nil
+					matched, _, selfFiltered := c.matchComment(reply, since, skipUserFilter, r)
+					if matched && !selfFiltered {
+						return true, "", false, nil
+					}
+					if selfFiltered {
+						anySelfFiltered = true
 					}
 				}
 				if hasReplyAfterSince && comment.Replies.PageInfo.HasPreviousPage {
-					matched, err := c.paginateReplies(ctx, comment.ID, comment.Replies.PageInfo.StartCursor, since, skipUserFilter, r)
+					matched, sf, err := c.paginateReplies(ctx, comment.ID, comment.Replies.PageInfo.StartCursor, since, skipUserFilter, r)
 					if err != nil {
-						return false, "", err
+						return false, "", false, err
 					}
-					if matched {
-						return true, "", nil
+					if matched && !sf {
+						return true, "", false, nil
+					}
+					if sf {
+						anySelfFiltered = true
 					}
 				}
 			}
@@ -132,24 +144,28 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 			cursor := q.Repository.Discussion.Comments.PageInfo.StartCursor
 			commentsCursor = &cursor
 		}
-		return false, "", nil
+		if anySelfFiltered {
+			return true, "", true, nil
+		}
+		return false, "", false, nil
 	case "closed", "answered":
 		var q discussionQuery
 		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
-			return false, "", skipNotFound(err)
+			return false, "", false, skipNotFound(err)
 		}
 		d := q.Repository.Discussion
 		matched := (cond == "closed" && d.Closed) || (cond == "answered" && d.IsAnswered)
 		if !matched {
-			return false, "", nil
+			return false, "", false, nil
 		}
-		return true, "true", nil
+		return true, "true", false, nil
 	}
-	return false, "", nil
+	return false, "", false, nil
 }
 
-func (c *DiscussionChecker) paginateReplies(ctx context.Context, commentID githubv4.ID, startCursor githubv4.String, since time.Time, skipUserFilter bool, r *rule.WatchRule) (bool, error) {
+func (c *DiscussionChecker) paginateReplies(ctx context.Context, commentID githubv4.ID, startCursor githubv4.String, since time.Time, skipUserFilter bool, r *rule.WatchRule) (matched bool, selfFiltered bool, err error) {
 	cursor := &startCursor
+	anySelfFiltered := false
 	for {
 		variables := map[string]any{
 			"id":     commentID,
@@ -157,36 +173,42 @@ func (c *DiscussionChecker) paginateReplies(ctx context.Context, commentID githu
 		}
 		var q discussionCommentRepliesQuery
 		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
-			return false, skipNotFound(err)
+			return false, false, skipNotFound(err)
 		}
 		allBeforeSince := true
 		for _, reply := range q.Node.DiscussionComment.Replies.Nodes {
 			if reply.CreatedAt.After(since) {
 				allBeforeSince = false
 			}
-			if matched, _ := c.matchComment(reply, since, skipUserFilter, r); matched {
-				return true, nil
+			m, _, sf := c.matchComment(reply, since, skipUserFilter, r)
+			if m && !sf {
+				return true, false, nil
+			}
+			if sf {
+				anySelfFiltered = true
 			}
 		}
 		if !q.Node.DiscussionComment.Replies.PageInfo.HasPreviousPage {
 			break
 		}
-		// Replies are chronologically ordered; older pages only have older replies.
 		if allBeforeSince && len(q.Node.DiscussionComment.Replies.Nodes) > 0 {
 			break
 		}
 		next := q.Node.DiscussionComment.Replies.PageInfo.StartCursor
 		cursor = &next
 	}
-	return false, nil
+	if anySelfFiltered {
+		return true, true, nil
+	}
+	return false, false, nil
 }
 
-func (c *DiscussionChecker) matchComment(node discussionCommentNode, since time.Time, skipUserFilter bool, r *rule.WatchRule) (bool, string) {
+func (c *DiscussionChecker) matchComment(node discussionCommentNode, since time.Time, skipUserFilter bool, r *rule.WatchRule) (matched bool, stateKey string, selfFiltered bool) {
 	if !node.CreatedAt.After(since) {
-		return false, ""
+		return false, "", false
 	}
 	if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), node.Author.Login) {
-		return false, ""
+		return true, "", true
 	}
-	return true, ""
+	return true, "", false
 }

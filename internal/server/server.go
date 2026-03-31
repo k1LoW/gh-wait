@@ -615,7 +615,7 @@ func checkRule(ctx context.Context, state *State, c checker.Checker, act map[str
 	// Use CheckState (no transition tracking) because until conditions
 	// should match whenever the state holds, not only on transitions.
 	if len(r.Until) > 0 {
-		untilMatched, err := c.CheckState(ctx, r, r.Until)
+		untilMatched, untilSelfFiltered, err := c.CheckState(ctx, r, r.Until)
 		if err != nil {
 			slog.Error("until check failed", "rule_id", r.ID, "error", err)
 			if isFirstCheck {
@@ -627,10 +627,7 @@ func checkRule(ctx context.Context, state *State, c checker.Checker, act map[str
 		if untilMatched {
 			if !isFirstCheck {
 				slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-				if len(r.Conditions) == 0 || conditionsOverlapUntil(r.Conditions, r.Until) {
-					// Also execute when conditions overlap with until, because
-					// the transition-based check would miss state already present
-					// at seeding time.
+				if !untilSelfFiltered && (len(r.Conditions) == 0 || conditionsOverlapUntil(r.Conditions, r.Until)) {
 					executeAction(act, r)
 				}
 				state.MarkTriggered(r.ID)
@@ -647,7 +644,7 @@ func checkRule(ctx context.Context, state *State, c checker.Checker, act map[str
 		return
 	}
 
-	matched, err := c.Check(ctx, r)
+	matched, selfFiltered, err := c.Check(ctx, r)
 	r.Seeding = false
 	// Sync FiredStates back (deep copy) after checker may have mutated them.
 	state.syncFiredStates(r)
@@ -659,8 +656,10 @@ func checkRule(ctx context.Context, state *State, c checker.Checker, act map[str
 		return
 	}
 	if matched {
-		slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-		executeAction(act, r)
+		slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number, "self_filtered", selfFiltered)
+		if !selfFiltered {
+			executeAction(act, r)
+		}
 
 		r.TriggerCount++
 		r.LastTriggeredAt = now

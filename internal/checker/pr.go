@@ -19,56 +19,60 @@ func NewPRChecker(client *github.Client, currentUser string) *PRChecker {
 	return &PRChecker{client: client, currentUser: currentUser}
 }
 
-func (c *PRChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+func (c *PRChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, bool, error) {
 	return c.CheckConditions(ctx, r, r.Conditions)
 }
 
-func (c *PRChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (c *PRChecker) CheckConditions(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return evalConditions(ctx, r, conditions, c.checkCondition, true)
 }
 
-func (c *PRChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (c *PRChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
 // checkCondition returns (matched, stateKey, error).
 // stateKey is empty for event-based conditions (commented) — they bypass transition tracking.
 // stateKey is non-empty for state-based conditions — used to detect transitions.
-func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, error) {
+func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, error) {
 	switch cond {
 	case "approved":
-		matched, err := c.checkApproved(ctx, owner, repo, r, skipUserFilter)
-		return matched, "true", err
+		matched, selfFiltered, err := c.checkApproved(ctx, owner, repo, r, skipUserFilter)
+		return matched, "true", selfFiltered, err
 	case "merged":
-		matched, err := c.checkMerged(ctx, owner, repo, r, skipUserFilter)
-		return matched, "true", err
+		matched, selfFiltered, err := c.checkMerged(ctx, owner, repo, r, skipUserFilter)
+		return matched, "true", selfFiltered, err
 	case "closed":
-		matched, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, skipUserFilter)
-		return matched, "true", err
+		matched, selfFiltered, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, skipUserFilter)
+		return matched, "true", selfFiltered, err
 	case "ci-completed", "ci-finished":
-		return c.checkCIFinished(ctx, owner, repo, r.Number)
+		matched, stateKey, err := c.checkCIFinished(ctx, owner, repo, r.Number)
+		return matched, stateKey, false, err
 	case "ci-failed":
-		return c.checkCIFailed(ctx, owner, repo, r.Number)
+		matched, stateKey, err := c.checkCIFailed(ctx, owner, repo, r.Number)
+		return matched, stateKey, false, err
 	case "commented":
-		matched, err := c.checkCommented(ctx, owner, repo, r, skipUserFilter)
-		return matched, "", err
+		matched, selfFiltered, err := c.checkCommented(ctx, owner, repo, r, skipUserFilter)
+		return matched, "", selfFiltered, err
 	}
-	return false, "", nil
+	return false, "", false, nil
 }
 
-func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
+func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (matched bool, selfFiltered bool, err error) {
 	opts := &github.ListOptions{PerPage: 100}
+	anySelfFiltered := false
 	for {
 		reviews, resp, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, opts)
 		if err != nil {
-			return false, skipNotFound(err)
+			return false, false, skipNotFound(err)
 		}
 		for _, review := range reviews {
 			if review.GetState() == "APPROVED" {
 				if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
+					anySelfFiltered = true
 					continue
 				}
-				return true, nil
+				return true, false, nil
 			}
 		}
 		if resp.NextPage == 0 {
@@ -76,21 +80,24 @@ func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *ru
 		}
 		opts.Page = resp.NextPage
 	}
-	return false, nil
+	if anySelfFiltered {
+		return true, true, nil
+	}
+	return false, false, nil
 }
 
-func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
+func (c *PRChecker) checkMerged(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (matched bool, selfFiltered bool, err error) {
 	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, r.Number)
 	if err != nil {
-		return false, skipNotFound(err)
+		return false, false, skipNotFound(err)
 	}
 	if !pr.GetMerged() {
-		return false, nil
+		return false, false, nil
 	}
 	if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), pr.GetMergedBy().GetLogin()) {
-		return false, nil
+		return true, true, nil
 	}
-	return true, nil
+	return true, false, nil
 }
 
 // checkCIFinished returns (matched, sha, error). SHA is the stateKey for CI conditions.
@@ -177,16 +184,18 @@ func (c *PRChecker) checkCIFailed(ctx context.Context, owner, repo string, numbe
 	return false, sha, nil
 }
 
-func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (bool, error) {
+func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (matched bool, selfFiltered bool, err error) {
 	since := r.SinceTime()
 
-	matched, err := checkIssueCommented(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, since, skipUserFilter)
+	issueMatched, issueSelfFiltered, err := checkIssueCommented(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, since, skipUserFilter)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	if matched {
-		return true, nil
+	if issueMatched && !issueSelfFiltered {
+		return true, false, nil
 	}
+
+	anySelfFiltered := issueSelfFiltered
 
 	reviewOpts := &github.PullRequestListCommentsOptions{
 		Since:       since,
@@ -195,13 +204,14 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	for {
 		reviewComments, resp, err := c.client.PullRequests.ListComments(ctx, owner, repo, r.Number, reviewOpts)
 		if err != nil {
-			return false, skipNotFound(err)
+			return false, false, skipNotFound(err)
 		}
 		for _, comment := range reviewComments {
 			if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), comment.GetUser().GetLogin()) {
+				anySelfFiltered = true
 				continue
 			}
-			return true, nil
+			return true, false, nil
 		}
 		if resp.NextPage == 0 {
 			break
@@ -213,14 +223,15 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 	for {
 		reviews, resp, err := c.client.PullRequests.ListReviews(ctx, owner, repo, r.Number, listOpts)
 		if err != nil {
-			return false, skipNotFound(err)
+			return false, false, skipNotFound(err)
 		}
 		for _, review := range reviews {
 			if review.GetSubmittedAt().After(since) && review.GetBody() != "" {
 				if !skipUserFilter && shouldIgnoreUser(c.currentUser, r.CompiledIgnoreUsers(), review.GetUser().GetLogin()) {
+					anySelfFiltered = true
 					continue
 				}
-				return true, nil
+				return true, false, nil
 			}
 		}
 		if resp.NextPage == 0 {
@@ -228,7 +239,10 @@ func (c *PRChecker) checkCommented(ctx context.Context, owner, repo string, r *r
 		}
 		listOpts.Page = resp.NextPage
 	}
-	return false, nil
+	if anySelfFiltered {
+		return true, true, nil
+	}
+	return false, false, nil
 }
 
 func skipNotFound(err error) error {
