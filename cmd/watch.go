@@ -67,6 +67,9 @@ func parseWatchFlags(cmd *cobra.Command, conditionFlags []string) (conditions []
 		actions = append(actions, "open")
 	}
 	if v, _ := cmd.Flags().GetBool("notify"); v {
+		if err := checkNotifyDeps(); err != nil {
+			return nil, nil, 0, nil, "", nil, err
+		}
 		actions = append(actions, "notify")
 	}
 	if len(actions) == 0 {
