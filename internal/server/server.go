@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,7 +25,6 @@ import (
 )
 
 const (
-	pollTick    = 1 * time.Second
 	backupDelay = 1 * time.Second
 )
 
@@ -33,6 +34,13 @@ type State struct {
 	shutdownCh chan struct{}
 	backupCh   chan struct{}
 	port       int
+
+	// Per-rule polling goroutine management
+	ruleLoopMu sync.Mutex
+	ruleLoops  map[string]context.CancelFunc
+	checkers   map[string]checker.Checker
+	actions    map[string]action.Action
+	parentCtx  context.Context
 }
 
 func NewState(port int) *State {
@@ -41,6 +49,7 @@ func NewState(port int) *State {
 		shutdownCh: make(chan struct{}, 1),
 		backupCh:   make(chan struct{}, 1),
 		port:       port,
+		ruleLoops:  make(map[string]context.CancelFunc),
 	}
 }
 
@@ -48,17 +57,23 @@ func (s *State) AddRule(r *rule.WatchRule) {
 	// Pre-compile ignore-user regexps so clones can share the cache.
 	r.CompiledIgnoreUsers()
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	isNew := true
 	// Deduplicate by ID
 	for i, existing := range s.rules {
 		if existing.ID == r.ID {
 			s.rules[i] = r
-			s.notifyBackup()
-			return
+			isNew = false
+			break
 		}
 	}
-	s.rules = append(s.rules, r)
+	if isNew {
+		s.rules = append(s.rules, r)
+	}
+	s.mu.Unlock()
 	s.notifyBackup()
+	if isNew && r.Status == "watching" {
+		s.startRuleLoop(r.ID)
+	}
 }
 
 func (s *State) Rules() []*rule.WatchRule {
@@ -72,6 +87,7 @@ func (s *State) Rules() []*rule.WatchRule {
 }
 
 func (s *State) RemoveRule(id string) bool {
+	s.stopRuleLoop(id)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, r := range s.rules {
@@ -429,11 +445,11 @@ func Run(ctx context.Context, addr string, port int) error {
 		return nil
 	})
 
-	// Polling loop
-	donegroup.Go(ctx, func() error {
-		pollLoop(ctx, state, checkers, actions)
-		return nil
-	})
+	// Initialize per-rule polling
+	state.checkers = checkers
+	state.actions = actions
+	state.parentCtx = ctx
+	state.StartAllRuleLoops()
 
 	// Shutdown listener
 	donegroup.Go(ctx, func() error {
@@ -466,112 +482,195 @@ func Run(ctx context.Context, addr string, port int) error {
 	return nil
 }
 
-func pollLoop(ctx context.Context, state *State, checkers map[string]checker.Checker, act map[string]action.Action) {
-	ticker := time.NewTicker(pollTick)
+// StartAllRuleLoops starts a polling goroutine for each existing watching rule.
+func (s *State) StartAllRuleLoops() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	s.ruleLoopMu.Lock()
+	defer s.ruleLoopMu.Unlock()
+	for _, r := range s.rules {
+		if r.Status == "watching" {
+			s.startRuleLoopLocked(r.ID)
+		}
+	}
+}
+
+func (s *State) startRuleLoop(id string) {
+	s.ruleLoopMu.Lock()
+	defer s.ruleLoopMu.Unlock()
+	s.startRuleLoopLocked(id)
+}
+
+func (s *State) startRuleLoopLocked(id string) {
+	if s.parentCtx == nil {
+		return
+	}
+	if _, ok := s.ruleLoops[id]; ok {
+		return
+	}
+	ctx, cancel := context.WithCancel(s.parentCtx) //nolint:gosec // cancel is stored in s.ruleLoops and called by stopRuleLoop
+	s.ruleLoops[id] = cancel
+	go s.ruleLoop(ctx, id)
+}
+
+func (s *State) stopRuleLoop(id string) {
+	s.ruleLoopMu.Lock()
+	defer s.ruleLoopMu.Unlock()
+	if cancel, ok := s.ruleLoops[id]; ok {
+		cancel()
+		delete(s.ruleLoops, id)
+	}
+}
+
+func (s *State) ruleLoop(ctx context.Context, id string) {
+	// Get the rule's interval for its own ticker
+	s.mu.RLock()
+	var interval time.Duration
+	for _, r := range s.rules {
+		if r.ID == id {
+			interval = r.PollInterval()
+			break
+		}
+	}
+	s.mu.RUnlock()
+	if interval == 0 {
+		interval = rule.DefaultInterval
+	}
+
+	// Jitter the initial tick to avoid thundering herd on the GitHub API
+	// when many rules share the same interval.
+	n, _ := crand.Int(crand.Reader, big.NewInt(int64(interval)))
+	jitter := time.Duration(n.Int64())
+	select {
+	case <-time.After(jitter):
+	case <-ctx.Done():
+		return
+	}
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			CheckRules(ctx, state, checkers, act)
+			s.checkSingleRule(ctx, id)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
+func (s *State) checkSingleRule(ctx context.Context, id string) {
+	// Get a clone of the rule
+	s.mu.RLock()
+	var r *rule.WatchRule
+	for _, existing := range s.rules {
+		if existing.ID == id && existing.Status == "watching" {
+			r = existing.Clone()
+			break
+		}
+	}
+	s.mu.RUnlock()
+	if r == nil {
+		return
+	}
+
+	c, ok := s.checkers[r.Type]
+	if !ok {
+		return
+	}
+
+	now := time.Now()
+	isFirstCheck := r.LastCheckedAt.IsZero()
+	s.updateLastCheckedAt(r.ID, now)
+
+	checkRule(ctx, s, c, s.actions, r, now, isFirstCheck)
+}
+
+// CheckRules checks all watching rules once (used by tests).
 func CheckRules(ctx context.Context, state *State, checkers map[string]checker.Checker, act map[string]action.Action) {
 	rules := state.WatchingRules()
 	now := time.Now()
 	for _, r := range rules {
-		// Skip if the rule's polling interval hasn't elapsed
-		interval := r.PollInterval()
-		if !r.LastCheckedAt.IsZero() && now.Sub(r.LastCheckedAt) < interval {
-			continue
-		}
-
 		c, ok := checkers[r.Type]
 		if !ok {
 			continue
 		}
-
-		// Detect first check before updating LastCheckedAt.
 		isFirstCheck := r.LastCheckedAt.IsZero()
-
-		// Update state's LastCheckedAt for interval scheduling without
-		// touching the clone, so SinceTime() returns the previous check
-		// time during condition evaluation.
 		state.updateLastCheckedAt(r.ID, now)
+		checkRule(ctx, state, c, act, r, now, isFirstCheck)
+	}
+}
 
-		// On the first check, enable seeding mode so that
-		// checkWithTransition records state-based conditions without
-		// triggering actions, while event-based conditions (e.g.,
-		// commented) still fire normally.
-		if isFirstCheck {
-			r.Seeding = true
-		}
+func checkRule(ctx context.Context, state *State, c checker.Checker, act map[string]action.Action, r *rule.WatchRule, now time.Time, isFirstCheck bool) {
+	// On the first check, enable seeding mode so that
+	// checkWithTransition records state-based conditions without
+	// triggering actions, while event-based conditions (e.g.,
+	// commented) still fire normally.
+	if isFirstCheck {
+		r.Seeding = true
+	}
 
-		// Step 1: Check until (termination) conditions.
-		// Use CheckState (no transition tracking) because until conditions
-		// should match whenever the state holds, not only on transitions.
-		if len(r.Until) > 0 {
-			untilMatched, err := c.CheckState(ctx, r, r.Until)
-			if err != nil {
-				slog.Error("until check failed", "rule_id", r.ID, "error", err)
-				if isFirstCheck {
-					state.updateLastCheckedAt(r.ID, time.Time{})
-				}
-				r.Seeding = false
-				continue
-			}
-			if untilMatched {
-				if !isFirstCheck {
-					slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-					if len(r.Conditions) == 0 || conditionsOverlapUntil(r.Conditions, r.Until) {
-						// Also execute when conditions overlap with until, because
-						// the transition-based check would miss state already present
-						// at seeding time.
-						executeAction(act, r)
-					}
-					state.MarkTriggered(r.ID)
-					state.RemoveRule(r.ID)
-					continue
-				}
-				slog.Info("first check: seeding until state", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-			}
-		}
-
-		// Step 2: Check trigger conditions
-		if len(r.Conditions) == 0 {
-			r.Seeding = false
-			continue
-		}
-
-		matched, err := c.Check(ctx, r)
-		r.Seeding = false
-		// Sync FiredStates back (deep copy) after checker may have mutated them.
-		state.syncFiredStates(r)
+	// Step 1: Check until (termination) conditions.
+	// Use CheckState (no transition tracking) because until conditions
+	// should match whenever the state holds, not only on transitions.
+	if len(r.Until) > 0 {
+		untilMatched, err := c.CheckState(ctx, r, r.Until)
 		if err != nil {
-			slog.Error("check failed", "rule_id", r.ID, "error", err)
+			slog.Error("until check failed", "rule_id", r.ID, "error", err)
 			if isFirstCheck {
 				state.updateLastCheckedAt(r.ID, time.Time{})
 			}
-			continue
+			r.Seeding = false
+			return
 		}
-		if matched {
-			slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
-			executeAction(act, r)
-
-			r.TriggerCount++
-			r.LastTriggeredAt = now
-			r.LastCheckedAt = now
-			state.UpdateRule(r)
-
-			// Step 3: Determine if rule should be removed
-			if r.IsOneShot() || (r.MaxCount > 0 && r.TriggerCount >= r.MaxCount) {
+		if untilMatched {
+			if !isFirstCheck {
+				slog.Info("until condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+				if len(r.Conditions) == 0 || conditionsOverlapUntil(r.Conditions, r.Until) {
+					// Also execute when conditions overlap with until, because
+					// the transition-based check would miss state already present
+					// at seeding time.
+					executeAction(act, r)
+				}
 				state.MarkTriggered(r.ID)
 				state.RemoveRule(r.ID)
+				return
 			}
+			slog.Info("first check: seeding until state", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+		}
+	}
+
+	// Step 2: Check trigger conditions
+	if len(r.Conditions) == 0 {
+		r.Seeding = false
+		return
+	}
+
+	matched, err := c.Check(ctx, r)
+	r.Seeding = false
+	// Sync FiredStates back (deep copy) after checker may have mutated them.
+	state.syncFiredStates(r)
+	if err != nil {
+		slog.Error("check failed", "rule_id", r.ID, "error", err)
+		if isFirstCheck {
+			state.updateLastCheckedAt(r.ID, time.Time{})
+		}
+		return
+	}
+	if matched {
+		slog.Info("condition matched", "rule_id", r.ID, "type", r.Type, "repo", r.Repo, "number", r.Number)
+		executeAction(act, r)
+
+		r.TriggerCount++
+		r.LastTriggeredAt = now
+		r.LastCheckedAt = now
+		state.UpdateRule(r)
+
+		// Step 3: Determine if rule should be removed
+		if r.IsOneShot() || (r.MaxCount > 0 && r.TriggerCount >= r.MaxCount) {
+			state.MarkTriggered(r.ID)
+			state.RemoveRule(r.ID)
 		}
 	}
 }
