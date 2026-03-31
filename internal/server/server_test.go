@@ -827,7 +827,9 @@ func TestCheckRulesSelfFilteredUntilSkipsAction(t *testing.T) {
 		LastCheckedAt: time.Now().Add(-time.Minute),
 	})
 
-	// Until-only mode with selfFiltered
+	// Note: in production, CheckState (used for until) sets skipUserFilter=true,
+	// so selfFiltered is always false. This mock exercises checkRule's branching
+	// logic in isolation, not real checker behavior.
 	mc := &mockChecker{conditionResult: map[string]bool{"merged": true}, selfFiltered: true}
 	ma := &mockAction{}
 	actions := map[string]action.Action{"notify": ma}
