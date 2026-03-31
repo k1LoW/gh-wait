@@ -504,7 +504,7 @@ func (s *State) startRuleLoopLocked(id string) {
 	if _, ok := s.ruleLoops[id]; ok {
 		return
 	}
-	ctx, cancel := context.WithCancel(s.parentCtx)
+	ctx, cancel := context.WithCancel(s.parentCtx) //nolint:gosec // cancel is stored in s.ruleLoops and called by stopRuleLoop
 	s.ruleLoops[id] = cancel
 	go s.ruleLoop(ctx, id)
 }
