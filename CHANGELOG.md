@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.10.2](https://github.com/k1LoW/gh-wait/compare/v0.10.1...v0.10.2) - 2026-03-31
+### Fix bug 🐛
+- fix: notify action not working from background server on macOS by @k1LoW in https://github.com/k1LoW/gh-wait/pull/42
+
 ## [v0.10.1](https://github.com/k1LoW/gh-wait/compare/v0.10.0...v0.10.1) - 2026-03-31
 ### New Features 🎉
 - fix: self-filtered conditions still match but skip action execution by @k1LoW in https://github.com/k1LoW/gh-wait/pull/40
