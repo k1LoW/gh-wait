@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -484,6 +486,8 @@ func Run(ctx context.Context, addr string, port int) error {
 func (s *State) StartAllRuleLoops() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	s.ruleLoopMu.Lock()
+	defer s.ruleLoopMu.Unlock()
 	for _, r := range s.rules {
 		if r.Status == "watching" {
 			s.startRuleLoopLocked(r.ID)
@@ -531,6 +535,16 @@ func (s *State) ruleLoop(ctx context.Context, id string) {
 	s.mu.RUnlock()
 	if interval == 0 {
 		interval = rule.DefaultInterval
+	}
+
+	// Jitter the initial tick to avoid thundering herd on the GitHub API
+	// when many rules share the same interval.
+	n, _ := crand.Int(crand.Reader, big.NewInt(int64(interval)))
+	jitter := time.Duration(n.Int64())
+	select {
+	case <-time.After(jitter):
+	case <-ctx.Done():
+		return
 	}
 
 	ticker := time.NewTicker(interval)
