@@ -388,6 +388,17 @@ func handleShutdown(state *State) http.HandlerFunc {
 // Server lifecycle
 
 func Run(ctx context.Context, addr string, port int) error {
+	// Set up file-based logging so background server logs are visible.
+	if dir, err := stateDir(); err == nil {
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			logPath := filepath.Join(dir, fmt.Sprintf("gh-wait-%d.log", port))
+			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+				slog.SetDefault(slog.New(slog.NewTextHandler(f, nil)))
+				slog.Info("log file opened", "path", logPath)
+			}
+		}
+	}
+
 	state := NewState(port)
 
 	if err := state.Load(); err != nil {
@@ -694,8 +705,11 @@ func executeAction(actions map[string]action.Action, r *rule.WatchRule) {
 			slog.Warn("unknown action", "rule_id", r.ID, "action", name)
 			continue
 		}
+		slog.Info("executing action", "rule_id", r.ID, "action", name)
 		if err := a.Execute(r); err != nil {
 			slog.Error("action failed", "rule_id", r.ID, "action", name, "error", err)
+		} else {
+			slog.Info("action succeeded", "rule_id", r.ID, "action", name)
 		}
 	}
 }

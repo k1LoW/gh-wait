@@ -4,7 +4,6 @@ import (
 	"log/slog"
 
 	"github.com/cli/go-gh/v2/pkg/browser"
-	"github.com/gen2brain/beeep"
 	"github.com/k1LoW/gh-wait/internal/rule"
 )
 
@@ -26,8 +25,3 @@ func (a *LogAction) Execute(r *rule.WatchRule) error {
 	return nil
 }
 
-type NotifyAction struct{}
-
-func (a *NotifyAction) Execute(r *rule.WatchRule) error {
-	return beeep.Notify("gh-wait", r.Label(), "")
-}
