@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.10.1](https://github.com/k1LoW/gh-wait/compare/v0.10.0...v0.10.1) - 2026-03-31
+### New Features 🎉
+- fix: self-filtered conditions still match but skip action execution by @k1LoW in https://github.com/k1LoW/gh-wait/pull/40
+
 ## [v0.10.0](https://github.com/k1LoW/gh-wait/compare/v0.9.3...v0.10.0) - 2026-03-31
 ### New Features 🎉
 - refactor: run each watch rule in its own polling goroutine by @k1LoW in https://github.com/k1LoW/gh-wait/pull/38
