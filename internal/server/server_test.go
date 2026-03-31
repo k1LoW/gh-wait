@@ -792,3 +792,55 @@ func TestBackupLoop(t *testing.T) {
 		t.Errorf("expected 1 rule, got %d", len(s2.Rules()))
 	}
 }
+
+func TestCheckRulesSelfFilteredSkipsAction(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
+		Conditions:    []string{"merged"},
+		LastCheckedAt: time.Now().Add(-time.Minute),
+	})
+
+	mc := &mockChecker{conditionResult: map[string]bool{"merged": true}, selfFiltered: true}
+	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, actions)
+
+	// Action should NOT be executed due to self-filter
+	if len(ma.executed) != 0 {
+		t.Errorf("expected no action when self-filtered, got %v", ma.executed)
+	}
+	// Rule should be removed (one-shot lifecycle still proceeds)
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed even when self-filtered")
+	}
+}
+
+func TestCheckRulesSelfFilteredUntilSkipsAction(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Actions: []string{"notify"}, Status: "watching",
+		Conditions:    nil,
+		Until:         []string{"merged"},
+		LastCheckedAt: time.Now().Add(-time.Minute),
+	})
+
+	// Until-only mode with selfFiltered
+	mc := &mockChecker{conditionResult: map[string]bool{"merged": true}, selfFiltered: true}
+	ma := &mockAction{}
+	actions := map[string]action.Action{"notify": ma}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, actions)
+
+	// Action should NOT be executed due to self-filter
+	if len(ma.executed) != 0 {
+		t.Errorf("expected no action in until-only self-filtered, got %v", ma.executed)
+	}
+	// Rule should still be removed
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed in until-only self-filtered")
+	}
+}

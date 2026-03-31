@@ -31,9 +31,10 @@ func (c *PRChecker) CheckState(ctx context.Context, r *rule.WatchRule, condition
 	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
-// checkCondition returns (matched, stateKey, error).
+// checkCondition returns (matched, stateKey, selfFiltered, error).
 // stateKey is empty for event-based conditions (commented) — they bypass transition tracking.
 // stateKey is non-empty for state-based conditions — used to detect transitions.
+// selfFiltered is true when a match was ignored due to user-based filtering.
 func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, error) {
 	switch cond {
 	case "approved":
