@@ -91,6 +91,17 @@ Use `--ignore-user` to exclude events from specific users (e.g., bots). The valu
 $ gh wait pr 42 --commented --ignore-user ".*\[bot\]" --ignore-user "dependabot"
 ```
 
+### Self-Filtering
+
+`gh-wait` automatically detects the authenticated GitHub user and filters out events triggered by yourself. For example, if you approve your own PR or leave a comment, those events will not trigger actions (browser open, notification).
+
+This prevents noise from your own activity while still tracking events from other users.
+
+- **Trigger conditions** (`--approved`, `--commented`, etc.) — self-filtering is applied. Actions are skipped if all matching events are from yourself.
+- **Until conditions** (`--until merged`, `--until closed`) — self-filtering is **not** applied. The rule terminates regardless of who caused the state change.
+- **CI conditions** (`--ci-completed`, `--ci-failed`) — self-filtering is not applied, as these are system events.
+- **Rule lifecycle** — even when actions are skipped due to self-filtering, the rule's trigger count is still incremented and one-shot rules are still removed.
+
 ### Managing Rules
 
 ```bash
@@ -162,6 +173,12 @@ abc12345  https://github.com/k1LoW/gh-wait/pull/2    approved    merged  1/3    
 $ gh extension install k1LoW/gh-wait
 ```
 
+### macOS: `--notify` requires `terminal-notifier`
+
+```bash
+$ brew install terminal-notifier
+```
+
 ## Command Line Options
 
 ### `gh wait pr [number]`
@@ -178,6 +195,7 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--ci-completed` | Watch for CI completion |
 | `--ci-failed` | Watch for CI failure |
 | `--open` | Open in browser when condition is met |
+| `--notify` | Send OS desktop notification when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
@@ -191,6 +209,7 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--commented` | Watch for new comments |
 | `--closed` | Watch for close |
 | `--open` | Open in browser when condition is met |
+| `--notify` | Send OS desktop notification when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
@@ -205,6 +224,7 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--closed` | Watch for close |
 | `--answered` | Watch for answer |
 | `--open` | Open in browser when condition is met |
+| `--notify` | Send OS desktop notification when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
@@ -221,6 +241,7 @@ The workflow run ID is required. You can also pass a full workflow run URL direc
 | `--succeeded` | Watch for success |
 | `--failed` | Watch for failure |
 | `--open` | Open in browser when condition is met |
+| `--notify` | Send OS desktop notification when condition is met |
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
