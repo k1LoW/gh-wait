@@ -284,27 +284,28 @@ func TestHandleShutdown(t *testing.T) {
 
 type mockChecker struct {
 	result          bool
+	selfFiltered    bool
 	err             error
 	conditionResult map[string]bool // per-condition results for CheckConditions
 }
 
-func (m *mockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+func (m *mockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, bool, error) {
 	return m.CheckConditions(ctx, r, r.Conditions)
 }
 
-func (m *mockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, conditions []string) (bool, error) {
+func (m *mockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, conditions []string) (bool, bool, error) {
 	if m.conditionResult == nil {
-		return m.result, m.err
+		return m.result, m.selfFiltered, m.err
 	}
 	for _, c := range conditions {
 		if m.conditionResult[c] {
-			return true, m.err
+			return true, m.selfFiltered, m.err
 		}
 	}
-	return false, m.err
+	return false, false, m.err
 }
 
-func (m *mockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (m *mockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return m.CheckConditions(ctx, r, conditions)
 }
 
@@ -315,21 +316,21 @@ type captureMockChecker struct {
 	capturedSince   *time.Time
 }
 
-func (m *captureMockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, error) {
+func (m *captureMockChecker) Check(ctx context.Context, r *rule.WatchRule) (bool, bool, error) {
 	if m.capturedSeeding != nil {
 		*m.capturedSeeding = r.Seeding
 	}
 	if m.capturedSince != nil {
 		*m.capturedSince = r.SinceTime()
 	}
-	return m.result, nil
+	return m.result, false, nil
 }
 
-func (m *captureMockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, _ []string) (bool, error) {
-	return m.result, nil
+func (m *captureMockChecker) CheckConditions(_ context.Context, _ *rule.WatchRule, _ []string) (bool, bool, error) {
+	return m.result, false, nil
 }
 
-func (m *captureMockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, error) {
+func (m *captureMockChecker) CheckState(ctx context.Context, r *rule.WatchRule, conditions []string) (bool, bool, error) {
 	return m.CheckConditions(ctx, r, conditions)
 }
 
@@ -789,5 +790,59 @@ func TestBackupLoop(t *testing.T) {
 	}
 	if len(s2.Rules()) != 1 {
 		t.Errorf("expected 1 rule, got %d", len(s2.Rules()))
+	}
+}
+
+func TestCheckRulesSelfFilteredSkipsAction(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Actions: []string{"open"}, Status: "watching",
+		Conditions:    []string{"merged"},
+		LastCheckedAt: time.Now().Add(-time.Minute),
+	})
+
+	mc := &mockChecker{conditionResult: map[string]bool{"merged": true}, selfFiltered: true}
+	ma := &mockAction{}
+	actions := map[string]action.Action{"open": ma}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, actions)
+
+	// Action should NOT be executed due to self-filter
+	if len(ma.executed) != 0 {
+		t.Errorf("expected no action when self-filtered, got %v", ma.executed)
+	}
+	// Rule should be removed (one-shot lifecycle still proceeds)
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed even when self-filtered")
+	}
+}
+
+func TestCheckRulesSelfFilteredUntilSkipsAction(t *testing.T) {
+	s := NewState(0)
+	s.AddRule(&rule.WatchRule{
+		ID: "r1", Type: "pr", Actions: []string{"notify"}, Status: "watching",
+		Conditions:    nil,
+		Until:         []string{"merged"},
+		LastCheckedAt: time.Now().Add(-time.Minute),
+	})
+
+	// Note: in production, CheckState (used for until) sets skipUserFilter=true,
+	// so selfFiltered is always false. This mock exercises checkRule's branching
+	// logic in isolation, not real checker behavior.
+	mc := &mockChecker{conditionResult: map[string]bool{"merged": true}, selfFiltered: true}
+	ma := &mockAction{}
+	actions := map[string]action.Action{"notify": ma}
+	checkers := map[string]checker.Checker{"pr": mc}
+
+	CheckRules(context.Background(), s, checkers, actions)
+
+	// Action should NOT be executed due to self-filter
+	if len(ma.executed) != 0 {
+		t.Errorf("expected no action in until-only self-filtered, got %v", ma.executed)
+	}
+	// Rule should still be removed
+	if len(s.Rules()) != 0 {
+		t.Error("expected rule to be removed in until-only self-filtered")
 	}
 }
