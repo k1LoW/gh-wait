@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.10.0](https://github.com/k1LoW/gh-wait/compare/v0.9.3...v0.10.0) - 2026-03-31
+### New Features 🎉
+- refactor: run each watch rule in its own polling goroutine by @k1LoW in https://github.com/k1LoW/gh-wait/pull/38
+
 ## [v0.9.3](https://github.com/k1LoW/gh-wait/compare/v0.9.2...v0.9.3) - 2026-03-30
 ### Fix bug 🐛
 - fix: fire state-based conditions that were already true at seeding time by @k1LoW in https://github.com/k1LoW/gh-wait/pull/36
