@@ -123,4 +123,53 @@ func TestCheckWithTransitionSeeding(t *testing.T) {
 			t.Error("expected true for event-based condition even during seeding")
 		}
 	})
+
+	t.Run("state-based: pre-existing state with multiple conditions does not fire", func(t *testing.T) {
+		// Simulates: gh wait <PR> --approved --ci-completed --open
+		// where PR is already approved and CI already completed at rule creation.
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		// Seed both conditions (first check)
+		checkWithTransition(r, "approved", true, "true")
+		checkWithTransition(r, "ci-completed", true, "sha1")
+		r.Seeding = false
+
+		// Second check: both conditions still hold but should NOT fire
+		if got := checkWithTransition(r, "approved", true, "true"); got {
+			t.Error("expected false for pre-existing approved state after seeding")
+		}
+		if got := checkWithTransition(r, "ci-completed", true, "sha1"); got {
+			t.Error("expected false for pre-existing ci-completed state after seeding")
+		}
+
+		// New commit pushed → CI completes with new SHA → should fire
+		if got := checkWithTransition(r, "ci-completed", true, "sha2"); !got {
+			t.Error("expected true when CI completes for new commit (genuine transition)")
+		}
+	})
+
+	t.Run("state-based: seeding cleared on revert allows subsequent real transition", func(t *testing.T) {
+		// Simulates: PR already approved, then approval dismissed, then re-approved
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		// Seed approved state
+		checkWithTransition(r, "approved", true, "true")
+		r.Seeding = false
+
+		// Seeded state consumed without firing
+		checkWithTransition(r, "approved", true, "true")
+
+		// Approval dismissed
+		checkWithTransition(r, "approved", false, "")
+
+		// Re-approved → genuine transition, should fire
+		if got := checkWithTransition(r, "approved", true, "true"); !got {
+			t.Error("expected true on re-approval after dismiss (genuine false→true transition)")
+		}
+
+		// Same state again → deduped
+		if got := checkWithTransition(r, "approved", true, "true"); got {
+			t.Error("expected false on duplicate after re-approval")
+		}
+	})
 }
