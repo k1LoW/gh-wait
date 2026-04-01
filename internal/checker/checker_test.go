@@ -148,6 +148,27 @@ func TestCheckWithTransitionSeeding(t *testing.T) {
 		}
 	})
 
+	t.Run("state-based: stale seeded state does not suppress transition back to original key", func(t *testing.T) {
+		// Simulates: CI completed with sha1 at rule creation, then new commit
+		// pushed (sha2), then force-push back to sha1.
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		// Seed with sha1
+		checkWithTransition(r, "ci-completed", true, "sha1")
+		r.Seeding = false
+
+		// New commit: CI completes with sha2 (different stateKey, fires)
+		if got := checkWithTransition(r, "ci-completed", true, "sha2"); !got {
+			t.Error("expected true for new stateKey sha2")
+		}
+
+		// Force-push back to sha1: should fire (genuine sha2→sha1 transition),
+		// not be suppressed by stale seeded state
+		if got := checkWithTransition(r, "ci-completed", true, "sha1"); !got {
+			t.Error("expected true on transition back to sha1 (stale seeded state should not suppress)")
+		}
+	})
+
 	t.Run("state-based: seeding cleared on revert allows subsequent real transition", func(t *testing.T) {
 		// Simulates: PR already approved, then approval dismissed, then re-approved
 		r := &rule.WatchRule{ID: "r1", Seeding: true}

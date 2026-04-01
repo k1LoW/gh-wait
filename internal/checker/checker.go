@@ -96,6 +96,9 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 		r.RecordFiredState(cond, stateKey)
 		return false
 	}
+	// Seeding is over: clear any stale seeded state for this condition so that
+	// it cannot suppress legitimate transitions in long-running tracking.
+	r.ClearSeededState(cond)
 	// State-based: only trigger on transition (new stateKey)
 	if r.HasFiredForState(cond, stateKey) {
 		return false
