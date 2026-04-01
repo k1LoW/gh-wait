@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.10.3](https://github.com/k1LoW/gh-wait/compare/v0.10.2...v0.10.3) - 2026-04-01
+### Fix bug 🐛
+- fix: prevent pre-existing states from triggering actions after seeding by @k1LoW in https://github.com/k1LoW/gh-wait/pull/44
+
 ## [v0.10.2](https://github.com/k1LoW/gh-wait/compare/v0.10.1...v0.10.2) - 2026-03-31
 ### Fix bug 🐛
 - fix: notify action not working from background server on macOS by @k1LoW in https://github.com/k1LoW/gh-wait/pull/42
