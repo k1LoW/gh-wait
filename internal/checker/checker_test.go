@@ -84,14 +84,14 @@ func TestCheckWithTransitionSeeding(t *testing.T) {
 			t.Error("expected state to be recorded in SeededStates during seeding")
 		}
 
-		// After seeding, same state should fire once (seeded state consumed)
+		// After seeding, same state should NOT fire (pre-existing state is already known)
 		r.Seeding = false
 		got = checkWithTransition(r, "approved", true, "true")
-		if !got {
-			t.Error("expected true on first non-seeding check with seeded state")
+		if got {
+			t.Error("expected false on first non-seeding check with seeded state (pre-existing)")
 		}
 
-		// Third check with same state should be deduped
+		// Subsequent check with same state should also be deduped
 		got = checkWithTransition(r, "approved", true, "true")
 		if got {
 			t.Error("expected false on subsequent check with same state (dedup)")

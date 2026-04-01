@@ -75,6 +75,7 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 	if !matched {
 		// State reverted (e.g., reopened, approval dismissed) — clear to allow re-trigger
 		r.ClearFiredState(cond)
+		r.ClearSeededState(cond)
 		return false
 	}
 	// Event-based conditions (empty stateKey) always fire
@@ -87,13 +88,13 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 		r.RecordSeededState(cond, stateKey)
 		return false
 	}
-	// If this state was seeded with the same stateKey, fire once and
-	// clear the seeded record so subsequent checks with the same key
-	// are treated as already-fired.
+	// If this state was seeded with the same stateKey, treat it as
+	// already-known and don't fire. This prevents pre-existing states
+	// from triggering actions after the seeding (first) check.
 	if r.IsSeededState(cond, stateKey) {
 		r.ClearSeededState(cond)
 		r.RecordFiredState(cond, stateKey)
-		return true
+		return false
 	}
 	// State-based: only trigger on transition (new stateKey)
 	if r.HasFiredForState(cond, stateKey) {
