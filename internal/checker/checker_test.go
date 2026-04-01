@@ -84,14 +84,14 @@ func TestCheckWithTransitionSeeding(t *testing.T) {
 			t.Error("expected state to be recorded in SeededStates during seeding")
 		}
 
-		// After seeding, same state should fire once (seeded state consumed)
+		// After seeding, same state should NOT fire (pre-existing state is already known)
 		r.Seeding = false
 		got = checkWithTransition(r, "approved", true, "true")
-		if !got {
-			t.Error("expected true on first non-seeding check with seeded state")
+		if got {
+			t.Error("expected false on first non-seeding check with seeded state (pre-existing)")
 		}
 
-		// Third check with same state should be deduped
+		// Subsequent check with same state should also be deduped
 		got = checkWithTransition(r, "approved", true, "true")
 		if got {
 			t.Error("expected false on subsequent check with same state (dedup)")
@@ -121,6 +121,76 @@ func TestCheckWithTransitionSeeding(t *testing.T) {
 		got := checkWithTransition(r, "commented", true, "")
 		if !got {
 			t.Error("expected true for event-based condition even during seeding")
+		}
+	})
+
+	t.Run("state-based: pre-existing state with multiple conditions does not fire", func(t *testing.T) {
+		// Simulates: gh wait <PR> --approved --ci-completed --open
+		// where PR is already approved and CI already completed at rule creation.
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		// Seed both conditions (first check)
+		checkWithTransition(r, "approved", true, "true")
+		checkWithTransition(r, "ci-completed", true, "sha1")
+		r.Seeding = false
+
+		// Second check: both conditions still hold but should NOT fire
+		if got := checkWithTransition(r, "approved", true, "true"); got {
+			t.Error("expected false for pre-existing approved state after seeding")
+		}
+		if got := checkWithTransition(r, "ci-completed", true, "sha1"); got {
+			t.Error("expected false for pre-existing ci-completed state after seeding")
+		}
+
+		// New commit pushed → CI completes with new SHA → should fire
+		if got := checkWithTransition(r, "ci-completed", true, "sha2"); !got {
+			t.Error("expected true when CI completes for new commit (genuine transition)")
+		}
+	})
+
+	t.Run("state-based: stale seeded state does not suppress transition back to original key", func(t *testing.T) {
+		// Simulates: CI completed with sha1 at rule creation, then new commit
+		// pushed (sha2), then force-push back to sha1.
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		// Seed with sha1
+		checkWithTransition(r, "ci-completed", true, "sha1")
+		r.Seeding = false
+
+		// New commit: CI completes with sha2 (different stateKey, fires)
+		if got := checkWithTransition(r, "ci-completed", true, "sha2"); !got {
+			t.Error("expected true for new stateKey sha2")
+		}
+
+		// Force-push back to sha1: should fire (genuine sha2→sha1 transition),
+		// not be suppressed by stale seeded state
+		if got := checkWithTransition(r, "ci-completed", true, "sha1"); !got {
+			t.Error("expected true on transition back to sha1 (stale seeded state should not suppress)")
+		}
+	})
+
+	t.Run("state-based: seeding cleared on revert allows subsequent real transition", func(t *testing.T) {
+		// Simulates: PR already approved, then approval dismissed, then re-approved
+		r := &rule.WatchRule{ID: "r1", Seeding: true}
+
+		// Seed approved state
+		checkWithTransition(r, "approved", true, "true")
+		r.Seeding = false
+
+		// Seeded state consumed without firing
+		checkWithTransition(r, "approved", true, "true")
+
+		// Approval dismissed
+		checkWithTransition(r, "approved", false, "")
+
+		// Re-approved → genuine transition, should fire
+		if got := checkWithTransition(r, "approved", true, "true"); !got {
+			t.Error("expected true on re-approval after dismiss (genuine false→true transition)")
+		}
+
+		// Same state again → deduped
+		if got := checkWithTransition(r, "approved", true, "true"); got {
+			t.Error("expected false on duplicate after re-approval")
 		}
 	})
 }
