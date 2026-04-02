@@ -37,7 +37,7 @@ func shouldIgnoreUser(currentUser string, compiled []*regexp.Regexp, login strin
 
 // checkConditionFunc is the signature of a per-checker condition evaluator.
 // When skipUserFilter is true, shouldIgnoreUser checks are skipped (used for until/termination conditions).
-type checkConditionFunc func(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (matched bool, stateKey string, selfFiltered bool, err error)
+type checkConditionFunc func(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (matched bool, stateKey string, selfFiltered bool, terminal bool, err error)
 
 // evalConditions iterates conditions, calling checkFn for each.
 // When trackTransition is true, state-transition tracking is applied so that
@@ -48,12 +48,12 @@ func evalConditions(ctx context.Context, r *rule.WatchRule, conditions []string,
 	owner, repo := rule.SplitRepo(r.Repo)
 	anySelfFiltered := false
 	for _, cond := range conditions {
-		matched, stateKey, selfFiltered, err := checkFn(ctx, owner, repo, r, cond, skipUserFilter)
+		matched, stateKey, selfFiltered, terminal, err := checkFn(ctx, owner, repo, r, cond, skipUserFilter)
 		if err != nil {
 			return false, false, err
 		}
 		if trackTransition {
-			matched = checkWithTransition(r, cond, matched, stateKey)
+			matched = checkWithTransition(r, cond, matched, stateKey, terminal)
 		}
 		if matched {
 			if !selfFiltered {
@@ -71,7 +71,7 @@ func evalConditions(ctx context.Context, r *rule.WatchRule, conditions []string,
 // checkWithTransition applies state-transition tracking to a condition check result.
 // State-based conditions (non-empty stateKey) only trigger once per state transition.
 // Event-based conditions (empty stateKey) always pass through.
-func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey string) bool {
+func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey string, terminal bool) bool {
 	if !matched {
 		// State reverted (e.g., reopened, approval dismissed) — clear to allow re-trigger
 		r.ClearFiredState(cond)
@@ -80,6 +80,16 @@ func checkWithTransition(r *rule.WatchRule, cond string, matched bool, stateKey 
 	}
 	// Event-based conditions (empty stateKey) always fire
 	if stateKey == "" {
+		return true
+	}
+	// Terminal conditions (irreversible states like merged, completed) bypass
+	// seeding entirely — they cannot revert, so suppressing them would cause
+	// them to never trigger.
+	if terminal {
+		if r.HasFiredForState(cond, stateKey) {
+			return false
+		}
+		r.RecordFiredState(cond, stateKey)
 		return true
 	}
 	// When seeding (first check), record state but don't trigger.

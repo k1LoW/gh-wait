@@ -35,28 +35,28 @@ func (c *PRChecker) CheckState(ctx context.Context, r *rule.WatchRule, condition
 // stateKey is empty for event-based conditions (commented) — they bypass transition tracking.
 // stateKey is non-empty for state-based conditions — used to detect transitions.
 // selfFiltered is true when a match was ignored due to user-based filtering.
-func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, error) {
+func (c *PRChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, bool, error) {
 	switch cond {
 	case "approved":
 		matched, selfFiltered, err := c.checkApproved(ctx, owner, repo, r, skipUserFilter)
-		return matched, "true", selfFiltered, err
+		return matched, "true", selfFiltered, false, err
 	case "merged":
 		matched, selfFiltered, err := c.checkMerged(ctx, owner, repo, r, skipUserFilter)
-		return matched, "true", selfFiltered, err
+		return matched, "true", selfFiltered, true, err
 	case "closed":
 		matched, selfFiltered, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, skipUserFilter)
-		return matched, "true", selfFiltered, err
+		return matched, "true", selfFiltered, true, err
 	case "ci-completed", "ci-finished":
 		matched, stateKey, err := c.checkCIFinished(ctx, owner, repo, r.Number)
-		return matched, stateKey, false, err
+		return matched, stateKey, false, false, err
 	case "ci-failed":
 		matched, stateKey, err := c.checkCIFailed(ctx, owner, repo, r.Number)
-		return matched, stateKey, false, err
+		return matched, stateKey, false, false, err
 	case "commented":
 		matched, selfFiltered, err := c.checkCommented(ctx, owner, repo, r, skipUserFilter)
-		return matched, "", selfFiltered, err
+		return matched, "", selfFiltered, false, err
 	}
-	return false, "", false, nil
+	return false, "", false, false, nil
 }
 
 func (c *PRChecker) checkApproved(ctx context.Context, owner, repo string, r *rule.WatchRule, skipUserFilter bool) (matched bool, selfFiltered bool, err error) {

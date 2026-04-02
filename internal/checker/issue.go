@@ -28,15 +28,15 @@ func (c *IssueChecker) CheckState(ctx context.Context, r *rule.WatchRule, condit
 	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
-func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, error) {
+func (c *IssueChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, bool, error) {
 	switch cond {
 	case "commented":
 		since := r.SinceTime()
 		matched, selfFiltered, err := checkIssueCommented(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, since, skipUserFilter)
-		return matched, "", selfFiltered, err
+		return matched, "", selfFiltered, false, err
 	case "closed":
 		matched, selfFiltered, err := checkClosed(ctx, c.client, c.currentUser, r.CompiledIgnoreUsers(), owner, repo, r.Number, skipUserFilter)
-		return matched, "true", selfFiltered, err
+		return matched, "true", selfFiltered, true, err
 	}
-	return false, "", false, nil
+	return false, "", false, false, nil
 }
