@@ -86,7 +86,7 @@ func (c *DiscussionChecker) CheckState(ctx context.Context, r *rule.WatchRule, c
 	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
-func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, error) {
+func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (bool, string, bool, bool, error) {
 	variables := map[string]any{
 		"owner":  githubv4.String(owner),
 		"repo":   githubv4.String(repo),
@@ -102,12 +102,12 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 			variables["commentsCursor"] = commentsCursor
 			var q discussionCommentsQuery
 			if err := c.v4Client.Query(ctx, &q, variables); err != nil {
-				return false, "", false, skipNotFound(err)
+				return false, "", false, false, skipNotFound(err)
 			}
 			for _, comment := range q.Repository.Discussion.Comments.Nodes {
 				matched, _, selfFiltered := c.matchComment(comment.discussionCommentNode, since, skipUserFilter, r)
 				if matched && !selfFiltered {
-					return true, "", false, nil
+					return true, "", false, false, nil
 				}
 				if selfFiltered {
 					anySelfFiltered = true
@@ -119,7 +119,7 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 					}
 					matched, _, selfFiltered := c.matchComment(reply, since, skipUserFilter, r)
 					if matched && !selfFiltered {
-						return true, "", false, nil
+						return true, "", false, false, nil
 					}
 					if selfFiltered {
 						anySelfFiltered = true
@@ -128,10 +128,10 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 				if hasReplyAfterSince && comment.Replies.PageInfo.HasPreviousPage {
 					matched, sf, err := c.paginateReplies(ctx, comment.ID, comment.Replies.PageInfo.StartCursor, since, skipUserFilter, r)
 					if err != nil {
-						return false, "", false, err
+						return false, "", false, false, err
 					}
 					if matched && !sf {
-						return true, "", false, nil
+						return true, "", false, false, nil
 					}
 					if sf {
 						anySelfFiltered = true
@@ -145,22 +145,22 @@ func (c *DiscussionChecker) checkCondition(ctx context.Context, owner, repo stri
 			commentsCursor = &cursor
 		}
 		if anySelfFiltered {
-			return true, "", true, nil
+			return true, "", true, false, nil
 		}
-		return false, "", false, nil
+		return false, "", false, false, nil
 	case "closed", "answered":
 		var q discussionQuery
 		if err := c.v4Client.Query(ctx, &q, variables); err != nil {
-			return false, "", false, skipNotFound(err)
+			return false, "", false, false, skipNotFound(err)
 		}
 		d := q.Repository.Discussion
 		matched := (cond == "closed" && d.Closed) || (cond == "answered" && d.IsAnswered)
 		if !matched {
-			return false, "", false, nil
+			return false, "", false, false, nil
 		}
-		return true, "true", false, nil
+		return true, "true", false, true, nil
 	}
-	return false, "", false, nil
+	return false, "", false, false, nil
 }
 
 func (c *DiscussionChecker) paginateReplies(ctx context.Context, commentID githubv4.ID, startCursor githubv4.String, since time.Time, skipUserFilter bool, r *rule.WatchRule) (matched bool, selfFiltered bool, err error) {

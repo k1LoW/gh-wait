@@ -28,10 +28,10 @@ func (c *WorkflowChecker) CheckState(ctx context.Context, r *rule.WatchRule, con
 	return evalConditions(ctx, r, conditions, c.checkCondition, false)
 }
 
-func (c *WorkflowChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, _ bool) (bool, string, bool, error) {
+func (c *WorkflowChecker) checkCondition(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, _ bool) (bool, string, bool, bool, error) {
 	run, _, err := c.client.Actions.GetWorkflowRunByID(ctx, owner, repo, int64(r.Number))
 	if err != nil {
-		return false, "", false, skipNotFound(err)
+		return false, "", false, false, skipNotFound(err)
 	}
 
 	status := run.GetStatus()
@@ -40,21 +40,21 @@ func (c *WorkflowChecker) checkCondition(ctx context.Context, owner, repo string
 	switch cond {
 	case "completed":
 		if status != "completed" {
-			return false, "", false, nil
+			return false, "", false, false, nil
 		}
-		return true, conclusion, false, nil
+		return true, conclusion, false, true, nil
 	case "succeeded":
 		matched := status == "completed" && conclusion == "success"
 		if !matched {
-			return false, "", false, nil
+			return false, "", false, false, nil
 		}
-		return true, "true", false, nil
+		return true, "true", false, true, nil
 	case "failed":
 		matched := status == "completed" && conclusion == "failure"
 		if !matched {
-			return false, "", false, nil
+			return false, "", false, false, nil
 		}
-		return true, "true", false, nil
+		return true, "true", false, true, nil
 	}
-	return false, "", false, nil
+	return false, "", false, false, nil
 }
