@@ -37,6 +37,8 @@ func shouldIgnoreUser(currentUser string, compiled []*regexp.Regexp, login strin
 
 // checkConditionFunc is the signature of a per-checker condition evaluator.
 // When skipUserFilter is true, shouldIgnoreUser checks are skipped (used for until/termination conditions).
+// The terminal result indicates an irreversible state (e.g., merged, completed);
+// such conditions bypass seeding but still deduplicate via fired-state tracking.
 type checkConditionFunc func(ctx context.Context, owner, repo string, r *rule.WatchRule, cond string, skipUserFilter bool) (matched bool, stateKey string, selfFiltered bool, terminal bool, err error)
 
 // evalConditions iterates conditions, calling checkFn for each.
