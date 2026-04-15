@@ -163,14 +163,18 @@ func addWatchRule(cmd *cobra.Command, ruleType string, number int, conditionFlag
 	case "workflow":
 		typeLabel = "Workflow run"
 	}
+	intervalStr := interval
+	if intervalStr == "" {
+		intervalStr = rule.DefaultIntervalStr
+	}
 	actionSuffix := ""
 	if len(actions) > 0 {
 		actionSuffix = fmt.Sprintf(" (actions: %s)", strings.Join(actions, ", "))
 	}
 	if ruleType == "workflow" {
-		fmt.Printf("Watching %s %d on %s for: %s%s\n", typeLabel, number, repo, strings.Join(conditions, ", "), actionSuffix)
+		fmt.Printf("Watching %s %d on %s for: %s (interval: %s)%s\n", typeLabel, number, repo, strings.Join(conditions, ", "), intervalStr, actionSuffix)
 	} else {
-		fmt.Printf("Watching %s #%d on %s for: %s%s\n", typeLabel, number, repo, strings.Join(conditions, ", "), actionSuffix)
+		fmt.Printf("Watching %s #%d on %s for: %s (interval: %s)%s\n", typeLabel, number, repo, strings.Join(conditions, ", "), intervalStr, actionSuffix)
 	}
 	return nil
 }
