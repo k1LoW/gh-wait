@@ -140,8 +140,8 @@ func (r *WatchRule) SinceTime() time.Time {
 	return r.CreatedAt
 }
 
-const DefaultInterval = 30 * time.Second
-const DefaultIntervalStr = "30sec"
+const DefaultInterval = 1 * time.Minute
+const DefaultIntervalStr = "1min"
 
 // PollInterval returns the rule's polling interval as time.Duration.
 // Falls back to DefaultInterval if not set or invalid.
