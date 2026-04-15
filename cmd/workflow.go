@@ -38,7 +38,7 @@ Termination:
 
 Polling:
   The server polls the GitHub API at the interval specified by --interval
-  (default: 30sec). Accepts durations like 30sec, 5min, 1h.`,
+  (default: 1min). Accepts durations like 30sec, 5min, 1h.`,
 	Example: `  # Watch a workflow run for completion (default)
   gh wait workflow 23424874935 --repo owner/repo
 
