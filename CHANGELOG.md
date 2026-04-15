@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.10.6](https://github.com/k1LoW/gh-wait/compare/v0.10.5...v0.10.6) - 2026-04-15
+### Other Changes
+- feat: use type-specific default polling interval by @k1LoW in https://github.com/k1LoW/gh-wait/pull/51
+
 ## [v0.10.5](https://github.com/k1LoW/gh-wait/compare/v0.10.4...v0.10.5) - 2026-04-15
 ### Dependency Updates ⬆️
 - chore(deps): bump softprops/action-gh-release from 2 to 3 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/gh-wait/pull/48
