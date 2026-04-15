@@ -16,7 +16,7 @@ import (
 
 type WatchRule struct {
 	ID              string            `json:"id"`
-	Type            string            `json:"type"` // "pr", "issue", "workflow"
+	Type            string            `json:"type"` // "pr", "issue", "discussion", "workflow"
 	Repo            string            `json:"repo"` // "owner/repo"
 	Number          int               `json:"number"`
 	Conditions      []string          `json:"conditions"`        // OR evaluation
