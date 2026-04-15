@@ -36,7 +36,7 @@ Termination:
 
 Polling:
   The server polls the GitHub API at the interval specified by --interval
-  (default: 30sec). Accepts durations like 30sec, 5min, 1h.
+  (default: 30min). Accepts durations like 30sec, 5min, 1h.
 
 Filtering:
   Use --ignore-user to exclude events from specific users. The value is
