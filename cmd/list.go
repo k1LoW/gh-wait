@@ -69,7 +69,7 @@ The server must be running for this command to work.`,
 			}
 			intervalStr := r.Interval
 			if intervalStr == "" {
-				intervalStr = rule.DefaultIntervalStr
+				intervalStr = rule.DefaultIntervalStrForType(r.Type)
 			}
 			lastTriggeredStr := "-"
 			if !r.LastTriggeredAt.IsZero() {

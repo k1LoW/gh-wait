@@ -194,6 +194,54 @@ func TestClone(t *testing.T) {
 	})
 }
 
+func TestDefaultIntervalForType(t *testing.T) {
+	tests := []struct {
+		ruleType    string
+		wantDur     time.Duration
+		wantStr     string
+	}{
+		{"pr", 1 * time.Minute, "1min"},
+		{"workflow", 1 * time.Minute, "1min"},
+		{"issue", 30 * time.Minute, "30min"},
+		{"discussion", 30 * time.Minute, "30min"},
+		{"", 1 * time.Minute, "1min"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.ruleType, func(t *testing.T) {
+			if got := DefaultIntervalForType(tt.ruleType); got != tt.wantDur {
+				t.Errorf("DefaultIntervalForType(%q) = %v, want %v", tt.ruleType, got, tt.wantDur)
+			}
+			if got := DefaultIntervalStrForType(tt.ruleType); got != tt.wantStr {
+				t.Errorf("DefaultIntervalStrForType(%q) = %q, want %q", tt.ruleType, got, tt.wantStr)
+			}
+		})
+	}
+}
+
+func TestPollInterval(t *testing.T) {
+	tests := []struct {
+		name     string
+		rule     *WatchRule
+		expected time.Duration
+	}{
+		{"pr empty interval", &WatchRule{Type: "pr"}, 1 * time.Minute},
+		{"issue empty interval", &WatchRule{Type: "issue"}, 30 * time.Minute},
+		{"discussion empty interval", &WatchRule{Type: "discussion"}, 30 * time.Minute},
+		{"workflow empty interval", &WatchRule{Type: "workflow"}, 1 * time.Minute},
+		{"pr custom interval", &WatchRule{Type: "pr", Interval: "5min"}, 5 * time.Minute},
+		{"issue custom interval", &WatchRule{Type: "issue", Interval: "10min"}, 10 * time.Minute},
+		{"pr invalid interval", &WatchRule{Type: "pr", Interval: "invalid"}, 1 * time.Minute},
+		{"issue invalid interval", &WatchRule{Type: "issue", Interval: "invalid"}, 30 * time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.rule.PollInterval(); got != tt.expected {
+				t.Errorf("PollInterval() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestSplitRepo(t *testing.T) {
 	tests := []struct {
 		input     string

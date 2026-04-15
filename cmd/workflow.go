@@ -38,7 +38,7 @@ Termination:
 
 Polling:
   The server polls the GitHub API at the interval specified by --interval
-  (default: 30sec). Accepts durations like 30sec, 5min, 1h.`,
+  (default: 1min). Accepts durations like 30sec, 5min, 1h.`,
 	Example: `  # Watch a workflow run for completion (default)
   gh wait workflow 23424874935 --repo owner/repo
 
@@ -63,7 +63,7 @@ Polling:
 
 func init() {
 	rootCmd.AddCommand(workflowCmd)
-	registerWatchFlags(workflowCmd)
+	registerWatchFlags(workflowCmd, "workflow")
 	workflowCmd.Flags().Bool("completed", false, "Watch for completion (any conclusion)")
 	workflowCmd.Flags().Bool("succeeded", false, "Watch for success")
 	workflowCmd.Flags().Bool("failed", false, "Watch for failure")

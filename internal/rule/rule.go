@@ -16,7 +16,7 @@ import (
 
 type WatchRule struct {
 	ID              string            `json:"id"`
-	Type            string            `json:"type"` // "pr", "issue", "workflow"
+	Type            string            `json:"type"` // "pr", "issue", "discussion", "workflow"
 	Repo            string            `json:"repo"` // "owner/repo"
 	Number          int               `json:"number"`
 	Conditions      []string          `json:"conditions"`        // OR evaluation
@@ -140,18 +140,38 @@ func (r *WatchRule) SinceTime() time.Time {
 	return r.CreatedAt
 }
 
-const DefaultInterval = 30 * time.Second
-const DefaultIntervalStr = "30sec"
+const DefaultInterval = 1 * time.Minute
+const DefaultIntervalStr = "1min"
+
+// DefaultIntervalForType returns the default polling interval for the given rule type.
+func DefaultIntervalForType(ruleType string) time.Duration {
+	switch ruleType {
+	case "issue", "discussion":
+		return 30 * time.Minute
+	default:
+		return DefaultInterval
+	}
+}
+
+// DefaultIntervalStrForType returns the default polling interval string for the given rule type.
+func DefaultIntervalStrForType(ruleType string) string {
+	switch ruleType {
+	case "issue", "discussion":
+		return "30min"
+	default:
+		return DefaultIntervalStr
+	}
+}
 
 // PollInterval returns the rule's polling interval as time.Duration.
-// Falls back to DefaultInterval if not set or invalid.
+// Falls back to the type-specific default if not set or invalid.
 func (r *WatchRule) PollInterval() time.Duration {
 	if r.Interval == "" {
-		return DefaultInterval
+		return DefaultIntervalForType(r.Type)
 	}
 	d, err := duration.Parse(r.Interval)
 	if err != nil {
-		return DefaultInterval
+		return DefaultIntervalForType(r.Type)
 	}
 	return d
 }

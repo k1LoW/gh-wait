@@ -46,7 +46,7 @@ Termination:
 
 Polling:
   The server polls the GitHub API at the interval specified by --interval
-  (default: 30sec). Accepts durations like 30sec, 5min, 1h.
+  (default: 1min). Accepts durations like 30sec, 5min, 1h.
 
 Filtering:
   Use --ignore-user to exclude events from specific users. The value is
@@ -112,7 +112,7 @@ func detectCurrentPR() (int, error) {
 
 func init() {
 	rootCmd.AddCommand(prCmd)
-	registerWatchFlags(prCmd)
+	registerWatchFlags(prCmd, "pr")
 	prCmd.Flags().Bool("approved", false, "Watch for approval")
 	prCmd.Flags().Bool("merged", false, "Watch for merge")
 	prCmd.Flags().Bool("closed", false, "Watch for close")

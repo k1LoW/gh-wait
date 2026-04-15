@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// registerWatchFlags registers the common flags shared by pr and issue subcommands.
-func registerWatchFlags(cmd *cobra.Command) {
+// registerWatchFlags registers the common flags shared by all watch subcommands.
+func registerWatchFlags(cmd *cobra.Command, ruleType string) {
 	cmd.Flags().String("repo", "", "Repository (owner/repo)")
 	cmd.Flags().String("url", "", "Override URL for the watch rule")
 	cmd.Flags().Bool("open", false, "Open in browser when condition is met")
@@ -21,7 +21,7 @@ func registerWatchFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSlice("until", nil, "Termination condition (e.g., closed, merged). Can be specified multiple times")
 	cmd.Flags().Int("count", 0, "Maximum number of triggers (0 = unlimited)")
 	cmd.Flags().StringSlice("ignore-user", nil, "Regex pattern of users to ignore (can be specified multiple times)")
-	cmd.Flags().String("interval", rule.DefaultIntervalStr, "Polling interval (e.g., 30sec, 5min, 1h)")
+	cmd.Flags().String("interval", rule.DefaultIntervalStrForType(ruleType), "Polling interval (e.g., 30sec, 5min, 1h)")
 	// --url is set internally by transformURLArgs; hide it from help.
 	_ = cmd.Flags().MarkHidden("url")
 }
