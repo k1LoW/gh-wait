@@ -69,7 +69,7 @@ Filtering:
 
 func init() {
 	rootCmd.AddCommand(issueCmd)
-	registerWatchFlags(issueCmd)
+	registerWatchFlags(issueCmd, "issue")
 	issueCmd.Flags().Bool("commented", false, "Watch for new comments")
 	issueCmd.Flags().Bool("closed", false, "Watch for close")
 }

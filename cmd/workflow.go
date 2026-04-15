@@ -63,7 +63,7 @@ Polling:
 
 func init() {
 	rootCmd.AddCommand(workflowCmd)
-	registerWatchFlags(workflowCmd)
+	registerWatchFlags(workflowCmd, "workflow")
 	workflowCmd.Flags().Bool("completed", false, "Watch for completion (any conclusion)")
 	workflowCmd.Flags().Bool("succeeded", false, "Watch for success")
 	workflowCmd.Flags().Bool("failed", false, "Watch for failure")

@@ -48,6 +48,11 @@ It uses a client-server architecture: a background server polls the GitHub
 API at configurable intervals and evaluates watch rules. The server is
 automatically started when you create the first watch rule.
 
+The default polling interval depends on the resource type:
+  pr, workflow:       1min
+  issue, discussion:  30min
+Use --interval to override (e.g., --interval 5min).
+
 Multiple conditions on a single rule are evaluated with OR logic — if any
 condition is met, the rule triggers. Use --until to set termination
 conditions so the rule automatically stops watching.

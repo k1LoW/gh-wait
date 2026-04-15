@@ -70,7 +70,7 @@ Filtering:
 
 func init() {
 	rootCmd.AddCommand(discussionCmd)
-	registerWatchFlags(discussionCmd)
+	registerWatchFlags(discussionCmd, "discussion")
 	discussionCmd.Flags().Bool("commented", false, "Watch for new comments")
 	discussionCmd.Flags().Bool("closed", false, "Watch for close")
 	discussionCmd.Flags().Bool("answered", false, "Watch for answer")

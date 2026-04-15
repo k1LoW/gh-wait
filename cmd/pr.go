@@ -112,7 +112,7 @@ func detectCurrentPR() (int, error) {
 
 func init() {
 	rootCmd.AddCommand(prCmd)
-	registerWatchFlags(prCmd)
+	registerWatchFlags(prCmd, "pr")
 	prCmd.Flags().Bool("approved", false, "Watch for approval")
 	prCmd.Flags().Bool("merged", false, "Watch for merge")
 	prCmd.Flags().Bool("closed", false, "Watch for close")
