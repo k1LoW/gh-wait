@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// registerWatchFlags registers the common flags shared by pr and issue subcommands.
+// registerWatchFlags registers the common flags shared by all watch subcommands.
 func registerWatchFlags(cmd *cobra.Command, ruleType string) {
 	cmd.Flags().String("repo", "", "Repository (owner/repo)")
 	cmd.Flags().String("url", "", "Override URL for the watch rule")
