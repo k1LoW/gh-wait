@@ -127,7 +127,7 @@ $ gh wait restart
 
 ```
 ID        URL                                        CONDITIONS  UNTIL   COUNT  INTERVAL  ACTION  STATUS    LAST_TRIGGERED_AT
-00a12cf6  https://github.com/k1LoW/gh-wait/pull/1    commented   closed  0/3    30sec     open    watching  -
+00a12cf6  https://github.com/k1LoW/gh-wait/pull/1    commented   closed  0/3    1min      open    watching  -
 abc12345  https://github.com/k1LoW/gh-wait/pull/2    approved    merged  1/3    5min      open    watching  3 minutes ago
 ```
 
@@ -199,7 +199,7 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
-| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `1min` |
 
 ### `gh wait issue <number>`
 
@@ -213,7 +213,7 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
-| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30min` |
 
 ### `gh wait discussion <number>`
 
@@ -228,7 +228,7 @@ If `number` is omitted, the PR associated with the current branch is automatical
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
-| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30min` |
 
 ### `gh wait workflow <run-id>`
 
@@ -245,7 +245,7 @@ The workflow run ID is required. You can also pass a full workflow run URL direc
 | `--until` | Termination condition (can be specified multiple times) |
 | `--count` | Maximum number of triggers (0 = unlimited) |
 | `--ignore-user` | Regex pattern of users to ignore (can be specified multiple times) |
-| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `30sec` |
+| `--interval` | Polling interval (e.g., `30sec`, `5min`, `1h`). Default: `1min` |
 
 ### `gh wait list`
 
@@ -271,5 +271,5 @@ The workflow run ID is required. You can also pass a full workflow run URL direc
 `gh-wait` uses a client-server architecture:
 
 1. **Background Server** — A lightweight HTTP server runs on `localhost:9248` (configurable). It is automatically started when you create your first watch rule.
-2. **Polling** — The server polls the GitHub API at each rule's configured interval (default: 30 seconds) to check conditions.
+2. **Polling** — The server polls the GitHub API at each rule's configured interval (default: `1min` for pr/workflow, `30min` for issue/discussion) to check conditions.
 3. **State Persistence** — Rules are persisted to `$XDG_STATE_HOME/gh-wait/` (or `~/.local/state/gh-wait/`) and survive server restarts.
