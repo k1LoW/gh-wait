@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.10.7](https://github.com/k1LoW/gh-wait/compare/v0.10.6...v0.10.7) - 2026-06-22
+
+### Dependency Updates ⬆️
+- chore(deps): bump actions/checkout from 6 to 7 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/gh-wait/pull/53
+
 ## [v0.10.6](https://github.com/k1LoW/gh-wait/compare/v0.10.5...v0.10.6) - 2026-04-15
 ### Other Changes
 - feat: use type-specific default polling interval by @k1LoW in https://github.com/k1LoW/gh-wait/pull/51
