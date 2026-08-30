@@ -8,7 +8,7 @@ require (
 	github.com/google/go-github/v83 v83.0.0
 	github.com/k1LoW/donegroup v1.10.3
 	github.com/k1LoW/duration v1.2.0
-	github.com/k1LoW/go-github-client/v83 v83.0.22
+	github.com/k1LoW/go-github-client/v83 v83.0.23
 	github.com/mergestat/timediff v0.0.4
 	github.com/shurcooL/githubv4 v0.0.0-20260209031235-2402fdf4a9ed
 	github.com/spf13/cobra v1.10.2
