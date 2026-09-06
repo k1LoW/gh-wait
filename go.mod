@@ -3,12 +3,12 @@ module github.com/k1LoW/gh-wait
 go 1.26.1
 
 require (
-	github.com/cli/go-gh/v2 v2.13.0
+	github.com/cli/go-gh/v2 v2.16.0
 	github.com/gen2brain/beeep v0.11.2
 	github.com/google/go-github/v83 v83.0.0
 	github.com/k1LoW/donegroup v1.10.3
 	github.com/k1LoW/duration v1.2.0
-	github.com/k1LoW/go-github-client/v83 v83.0.22
+	github.com/k1LoW/go-github-client/v83 v83.0.23
 	github.com/mergestat/timediff v0.0.4
 	github.com/shurcooL/githubv4 v0.0.0-20260209031235-2402fdf4a9ed
 	github.com/spf13/cobra v1.10.2
@@ -36,6 +36,6 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
