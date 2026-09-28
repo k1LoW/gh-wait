@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.10.7](https://github.com/k1LoW/gh-wait/compare/v0.10.6...v0.10.7) - 2026-09-28
+
+### Dependency Updates ⬆️
+- chore(deps): bump actions/checkout from 6 to 7 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/gh-wait/pull/53
+- chore(deps): bump github.com/k1LoW/go-github-client/v83 from 83.0.21 to 83.0.22 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/gh-wait/pull/56
+- chore(deps): bump actions/setup-go from 6.4.0 to 6.5.0 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/gh-wait/pull/55
+### Other Changes
+- ci: generate CREDITS with gocredits v1.0.0 from a make target by @k1LoW in https://github.com/k1LoW/gh-wait/pull/62
+
 ## [v0.10.6](https://github.com/k1LoW/gh-wait/compare/v0.10.5...v0.10.6) - 2026-04-15
 ### Other Changes
 - feat: use type-specific default polling interval by @k1LoW in https://github.com/k1LoW/gh-wait/pull/51
