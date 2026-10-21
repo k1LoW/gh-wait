@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.10.8](https://github.com/k1LoW/gh-wait/compare/v0.10.7...v0.10.8) - 2026-10-21
+
+### Dependency Updates ⬆️
+- chore(deps): bump the dependencies group across 1 directory with 3 updates by @dependabot[bot] in https://github.com/k1LoW/gh-wait/pull/63
+- chore(deps): bump the dependencies group across 1 directory with 6 updates by @dependabot[bot] in https://github.com/k1LoW/gh-wait/pull/64
+
 ## [v0.10.7](https://github.com/k1LoW/gh-wait/compare/v0.10.6...v0.10.7) - 2026-09-28
 
 ### Dependency Updates ⬆️
