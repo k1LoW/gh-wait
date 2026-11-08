@@ -29,7 +29,7 @@ jobs:
 
       - id: run-tagpr
         name: Run tagpr
-        uses: Songmu/tagpr@967f2ab22be958948fb5bd439bfa3d404dd9dee8 # v1.21.1
+        uses: Songmu/tagpr@047aec4b6c0ce166f52958b5a97f5a3d927fd65b # v1.22.0
 
   release:
     needs: tagpr
@@ -47,7 +47,7 @@ jobs:
           release_tag: ${{ needs.tagpr.outputs.tagpr-tag }}
           go_version_file: go.mod
       - name: Upload binaries to GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ needs.tagpr.outputs.tagpr-tag }}
           files: dist/*
