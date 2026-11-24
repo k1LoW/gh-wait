@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"maps"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -314,7 +316,47 @@ func NewHandler(state *State) http.Handler {
 	mux.HandleFunc("GET /_/api/rules", handleListRules(state))
 	mux.HandleFunc("DELETE /_/api/rules/{id}", handleDeleteRule(state))
 	mux.HandleFunc("POST /_/api/shutdown", handleShutdown(state))
-	return mux
+
+	// The API decodes JSON without checking Content-Type, so a cross-site
+	// "simple" POST (text/plain, no preflight) would otherwise reach
+	// state-changing endpoints.
+	return http.NewCrossOriginProtection().Handler(mux)
+}
+
+// WithLoopbackHostOnly rejects any request whose Host header does not name the
+// loopback interface.
+//
+// Binding to 127.0.0.1 alone does not keep web pages out: through DNS
+// rebinding, a page re-resolves its own domain to 127.0.0.1 and fetches its
+// own origin, so the browser treats the server as same-origin and the
+// response is readable. The browser always sends the name it believes it is
+// talking to, so a rebound request carries the attacker's domain in Host.
+func WithLoopbackHostOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackHost(r.Host) {
+			slog.Warn("rejected request with non-loopback Host header", "host", r.Host, "path", r.URL.Path)
+			http.Error(w, "forbidden: Host header does not name the loopback interface", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	h := host
+	if hostOnly, _, err := net.SplitHostPort(h); err == nil {
+		h = hostOnly
+	}
+	// "[::1]" without a port fails SplitHostPort.
+	h = strings.TrimSuffix(strings.TrimPrefix(h, "["), "]")
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
 }
 
 func handleStatus(state *State) http.HandlerFunc {
@@ -440,7 +482,7 @@ func Run(ctx context.Context, addr string, port int) error {
 		"notify": &action.NotifyAction{},
 	}
 
-	handler := NewHandler(state)
+	handler := WithLoopbackHostOnly(NewHandler(state))
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
